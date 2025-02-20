@@ -37,7 +37,7 @@ export default function AudioPlayer({ audioBlob }: AudioPlayerProps) {
         size="icon"
         onClick={togglePlayback}
         disabled={!audioBlob}
-        className="w-10 h-10 rounded-full"
+        className="size-8 rounded-full"
       >
         {isPlaying ? (
           <Pause className="w-5 h-5" />

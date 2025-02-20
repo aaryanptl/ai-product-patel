@@ -7,7 +7,7 @@ import SphereVisualizer from "@/components/SphereVisualizer";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
 import LiveTranscript from "@/components/LiveTranscript";
 import AudiencePoll from "@/components/AudiencePoll";
-import AudioRecorder from "@/components/AudioRecorder";
+import AudioRecorder from "@/components/audio-recorder";
 import AudioPlayer from "@/components/AudioPlayer";
 
 export default function Home() {
@@ -32,12 +32,12 @@ export default function Home() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          Human PMs vs AI: The Great Debate
+          Human vs AI: The Great Debate
         </motion.h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 bg-zinc-900/50 border-zinc-800 backdrop-blur-xl p-6 rounded-3xl">
-            <div className="relative aspect-[16/9] mb-8">
+            <div className="relative aspect-[16/9] mb-12">
               <SphereVisualizer isActive={false} />
               <div className="absolute inset-0 flex items-center justify-center">
                 <WaveformVisualizer isActive={false} />
@@ -49,12 +49,15 @@ export default function Home() {
                 onTranscriptReceived={handleTranscriptReceived}
                 onAudioResponse={handleAudioResponse}
               />
-              <AudioPlayer audioBlob={audioResponse} />
+              {/* <AudioPlayer audioBlob={audioResponse} /> */}
             </div>
           </Card>
 
           <div className="space-y-6">
-            <LiveTranscript transcript={transcript} />
+            <LiveTranscript
+              transcript={transcript}
+              audioResponse={audioResponse}
+            />
             <AudiencePoll />
           </div>
         </div>
