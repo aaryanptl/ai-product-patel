@@ -47,7 +47,7 @@ export default function AudiencePoll() {
         <div className="grid grid-cols-2 gap-3 mt-4">
           <Button
             variant="outline"
-            className="border-blue-500/50 hover:bg-blue-500/20"
+            className="border-blue-500/50 hover:bg-sky-200"
             onClick={() =>
               setVotes((prev) => ({ ...prev, human: prev.human + 1 }))
             }
@@ -56,7 +56,7 @@ export default function AudiencePoll() {
           </Button>
           <Button
             variant="outline"
-            className="border-green-500/50 hover:bg-green-500/20"
+            className="border-green-500/50 hover:bg-emerald-200"
             onClick={() => setVotes((prev) => ({ ...prev, ai: prev.ai + 1 }))}
           >
             Vote AI
