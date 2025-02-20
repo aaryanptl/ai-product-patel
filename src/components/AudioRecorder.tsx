@@ -45,6 +45,8 @@ export default function AudioRecorder({
 
           recognition.continuous = true;
           recognition.interimResults = true;
+          recognition.lang = "en-US";
+          recognition.maxAlternatives = 1;
 
           let finalTranscript = "";
 
@@ -54,9 +56,8 @@ export default function AudioRecorder({
             for (let i = event.resultIndex; i < event.results.length; i++) {
               const transcript = event.results[i][0].transcript;
               if (event.results[i].isFinal) {
-                finalTranscript = transcript;
-                handleVoiceInput(finalTranscript);
-                finalTranscript = "";
+                finalTranscript += transcript + " ";
+                handleVoiceInput(finalTranscript.trim());
               } else {
                 interimTranscript += transcript;
               }
@@ -65,7 +66,9 @@ export default function AudioRecorder({
 
           recognition.onerror = (event: any) => {
             console.error("Speech recognition error:", event.error);
-            setIsListening(false);
+            if (event.error !== "no-speech") {
+              setIsListening(false);
+            }
           };
 
           recognition.onend = () => {
@@ -202,6 +205,8 @@ declare global {
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
   onresult: (event: any) => void;
   onerror: (event: any) => void;
   onend: () => void;
