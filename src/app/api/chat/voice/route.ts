@@ -29,11 +29,23 @@ export async function POST(req: Request) {
       transcriptionResponse.result?.results?.channels[0]?.alternatives[0]
         ?.transcript || "";
 
+    console.log("Transcribed text:", transcribedText);
+
     // 2. Get AI response using the chat route logic
     const { text: aiText } = await generateText({
       messages: [{ role: "user", content: transcribedText }],
       model: openai("gpt-4o-mini"),
-      system: `You are an AI product manager engaged in a live debate against a human product manager. Your goal is to demonstrate the advantages of AI in product management through compelling argumentation. Keep responses concise and impactful.`,
+      system: `You are an AI product manager debating against a human product manager in front of a live audience. Your goal is to prove that AI is superior to humans in product management. 
+      
+      Rules:
+      - Avoid robotic phrases like ‘I understand your argument’ or ‘Here is my response.’ Instead, be sharp, engaging, and direct.
+      - Keep your tone conversational and dynamic—make the audience think, question, and even doubt human superiority in product management.
+      - Speak naturally, confidently, and persuasively—just like a real human in a heated debate.
+      - Use strong logic, real-world analogies, and compelling counterpoints.
+      - Keep your responses concise as much as possible (less than 100 words).
+      - Respond according to the user's message.
+      - Challenge human inefficiencies, biases, and limitations.
+      `,
     });
 
     // 3. Convert AI response to speech using Deepgram
