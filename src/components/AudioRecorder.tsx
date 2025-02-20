@@ -17,6 +17,7 @@ export default function AudioRecorder({
   const [isProcessing, setIsProcessing] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const intentionalStopRef = useRef(false);
 
   const stopCurrentAudio = () => {
     if (audioRef.current) {
@@ -49,6 +50,7 @@ export default function AudioRecorder({
           recognition.maxAlternatives = 1;
 
           let finalTranscript = "";
+          intentionalStopRef.current = false;
 
           recognition.onresult = (event: any) => {
             let interimTranscript = "";
@@ -58,6 +60,7 @@ export default function AudioRecorder({
               if (event.results[i].isFinal) {
                 finalTranscript += transcript + " ";
                 handleVoiceInput(finalTranscript.trim());
+                finalTranscript = ""; // Reset for next input
               } else {
                 interimTranscript += transcript;
               }
@@ -66,14 +69,15 @@ export default function AudioRecorder({
 
           recognition.onerror = (event: any) => {
             console.error("Speech recognition error:", event.error);
-            if (event.error !== "no-speech") {
-              setIsListening(false);
+            if (event.error !== "no-speech" && !intentionalStopRef.current) {
+              // Only restart if it wasn't intentionally stopped
+              recognition.start();
             }
           };
 
           recognition.onend = () => {
-            if (isListening) {
-              recognition.start();
+            if (isListening && !intentionalStopRef.current) {
+              recognition.start(); // Restart if we're supposed to be listening
             } else {
               setIsListening(false);
             }
@@ -155,9 +159,11 @@ export default function AudioRecorder({
 
   const toggleMic = () => {
     if (isListening) {
+      intentionalStopRef.current = true;
       window.recognition?.stop();
       stopCurrentAudio();
     } else {
+      intentionalStopRef.current = false;
       window.recognition?.start();
     }
     setIsListening(!isListening);
