@@ -7,11 +7,8 @@ import SphereVisualizer from "@/components/SphereVisualizer";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
 import LiveTranscript from "@/components/LiveTranscript";
 import AudiencePoll from "@/components/AudiencePoll";
-import AudioRecorder from "@/components/audio-recorder";
-import AudioPlayer from "@/components/AudioPlayer";
-import TextToSpeech from "@/components/TextToSpeech";
 import { Message } from "ai";
-import SpeechGenerator from "@/components/kokoro2";
+import Debater from "@/components/debater";
 
 export default function Home() {
   const [transcript, setTranscript] = useState<
@@ -57,21 +54,15 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
-              <AudioRecorder
+              <Debater
                 onTranscriptReceived={handleTranscriptReceived}
                 onAudioResponse={handleAudioResponse}
                 messages={messages}
               />
-              {/* <AudioPlayer audioBlob={audioResponse} /> */}
             </div>
           </Card>
 
           <div className="space-y-6">
-            <Card className="bg-zinc-900/50 border-zinc-800 backdrop-blur-xl p-6 rounded-3xl">
-              <h2 className="text-xl font-semibold mb-4">Text to Speech</h2>
-              {/* <TextToSpeech onAudioGenerated={handleAudioResponse} /> */}
-              <SpeechGenerator />
-            </Card>
             <LiveTranscript
               transcript={transcript}
               audioResponse={audioResponse}
