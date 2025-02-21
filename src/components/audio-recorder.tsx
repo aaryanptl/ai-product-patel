@@ -3,15 +3,18 @@
 import { useState, useRef } from "react";
 import { Button } from "./ui/button";
 import { Mic, Square } from "lucide-react";
+import { Message } from "ai";
 
 interface AudioRecorderProps {
   onTranscriptReceived: (text: string, speaker: "AI" | "Human") => void;
   onAudioResponse: (audioBlob: Blob) => void;
+  messages?: Message[];
 }
 
 export default function AudioRecorder({
   onTranscriptReceived,
   onAudioResponse,
+  messages = [],
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -67,6 +70,7 @@ export default function AudioRecorder({
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob);
+      formData.append("messages", JSON.stringify(messages));
 
       const response = await fetch("/api/chat/voice", {
         method: "POST",

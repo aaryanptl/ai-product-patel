@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion } from "framer-motion";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import AudioPlayer from "./AudioPlayer";
 
 interface LiveTranscriptProps {
@@ -16,6 +16,7 @@ export default function LiveTranscript({
   audioResponse,
 }: LiveTranscriptProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -25,9 +26,23 @@ export default function LiveTranscript({
 
   return (
     <Card className="bg-zinc-900/50 border-zinc-800 backdrop-blur-xl p-4 rounded-3xl">
-      <div className="flex items-center justify-between  mb-4">
-        <h2 className="text-lg font-semibold text-zinc-300">Live Transcript</h2>
-        {audioResponse && <AudioPlayer audioBlob={audioResponse} />}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-zinc-300">
+            Live Transcript
+          </h2>
+          {isAISpeaking && (
+            <span className="text-sm text-emerald-400 animate-pulse">
+              AI Speaking...
+            </span>
+          )}
+        </div>
+        {audioResponse && (
+          <AudioPlayer
+            audioBlob={audioResponse}
+            onPlayingChange={setIsAISpeaking}
+          />
+        )}
       </div>
 
       <div

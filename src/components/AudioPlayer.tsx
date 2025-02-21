@@ -6,9 +6,13 @@ import { Play, Pause } from "lucide-react";
 
 interface AudioPlayerProps {
   audioBlob: Blob | null;
+  onPlayingChange?: (isPlaying: boolean) => void;
 }
 
-export default function AudioPlayer({ audioBlob }: AudioPlayerProps) {
+export default function AudioPlayer({
+  audioBlob,
+  onPlayingChange,
+}: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -22,15 +26,22 @@ export default function AudioPlayer({ audioBlob }: AudioPlayerProps) {
       audioRef.current.src = audioUrl;
       audioRef.current.play();
     }
-    setIsPlaying(!isPlaying);
+    const newPlayingState = !isPlaying;
+    setIsPlaying(newPlayingState);
+    onPlayingChange?.(newPlayingState);
+  };
+
+  const handlePlaybackEnd = () => {
+    setIsPlaying(false);
+    onPlayingChange?.(false);
   };
 
   return (
     <div className="flex items-center gap-4">
       <audio
         ref={audioRef}
-        onEnded={() => setIsPlaying(false)}
-        onPause={() => setIsPlaying(false)}
+        onEnded={handlePlaybackEnd}
+        onPause={handlePlaybackEnd}
       />
       <Button
         variant="outline"
