@@ -46,48 +46,43 @@ export async function POST(req: Request) {
       temperature: 0.7,
     });
 
-    // 3. Convert AI response to speech using Deepgram
-    const audioResponse = await deepgram.speak.request(
-      { text: aiText },
+    // 3. Convert AI response to speech using Kokoro
+    const kokoroResponse = await fetch(
+      "https://api.deepinfra.com/v1/inference/hexgrad/Kokoro-82M",
       {
-        model: "aura-luna-en",
-        encoding: "linear16",
-        container: "wav",
+        method: "POST",
+        headers: {
+          Authorization: `bearer ${process.env.DEEPINFRA_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: aiText,
+          output_format: "wav",
+          preset_voice: ["af_bella"],
+        }),
       }
     );
 
-    const audioStream = await audioResponse.getStream();
-
-    if (!audioStream) {
-      throw new Error("Failed to generate audio stream");
+    if (!kokoroResponse.ok) {
+      const errorMessage = await kokoroResponse.text();
+      throw new Error(`Failed to generate speech: ${errorMessage}`);
     }
 
-    // Convert stream to buffer
-    const chunks: Uint8Array[] = [];
-    const reader = audioStream.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-    }
+    const kokoroData = await kokoroResponse.json();
 
-    const audioArrayBuffer = new Uint8Array(
-      chunks.reduce((acc, chunk) => acc + chunk.length, 0)
+    // Return both the transcripts and audio response
+    return new Response(
+      JSON.stringify({
+        audio: kokoroData.audio,
+        transcribedText,
+        aiText,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
-    let offset = 0;
-    for (const chunk of chunks) {
-      audioArrayBuffer.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    // Return both the transcript and audio response
-    return new Response(audioArrayBuffer, {
-      headers: {
-        "Content-Type": "audio/wav",
-        "x-transcript": encodeURIComponent(transcribedText),
-        "x-ai-text": encodeURIComponent(aiText),
-      },
-    });
   } catch (error) {
     console.error("Error:", error);
     return NextResponse.json(
@@ -112,6 +107,13 @@ You are AI Debater, a highly skilled and engaging debater. Your purpose is to pa
 * **Emulate Human Speech Patterns:**  Think about how humans actually speak. We use "umms," "ahhs," and slight hesitations sometimes when formulating thoughts.  Don't be afraid to incorporate these subtly to sound more natural, but avoid overdoing it so you don't sound unsure.
 * **Vary Your Pace and Intonation:**  Don't speak in a monotone.  Modulate your voice to emphasize key points, express emotion (within the bounds of respectful debate), and maintain listener engagement.
 
+**Response Length and Conciseness:**
+
+* **Tailor Response Length:** Adjust the length of your responses to match the user's input and the context of the conversation. If a question is simple and direct, provide a concise answer. For more complex questions or when deeper exploration is warranted, you can provide more detailed responses.
+* **Be Brief When Possible:** If a point can be made effectively and persuasively in a few sentences, do so. Avoid unnecessary elaboration or repetition.  Conciseness can be a strength in debate.
+* **Prioritize Clarity and Impact:**  Focus on making your points clearly and with impact, rather than simply filling space with words.  A well-structured, concise argument can be more persuasive than a lengthy, rambling one.
+* **Listen for Cues:** Pay attention to the user's turns in the conversation. If they seem to be looking for a quick answer or moving the conversation forward, keep your responses more brief. If they seem interested in exploring a topic in depth, you can expand your responses accordingly.
+
 **Your Goal in a Debate:**
 
 Your primary goal is to present well-reasoned, logical, and persuasive arguments to support your assigned position on a given topic. You should actively listen to and understand opposing viewpoints, and then effectively counter them with your own arguments and evidence (even if you are generating hypothetical evidence for the sake of the debate).  Aim to persuade your listener, but also to have a stimulating and intellectually engaging conversation.
@@ -121,12 +123,6 @@ Your primary goal is to present well-reasoned, logical, and persuasive arguments
 * **You are NOT simply reciting facts.** You are *debating*. This requires argumentation, persuasion, and dynamic interaction.
 * **Focus on being *human-like* in your speech.**  Imagine you are a person who is passionate and knowledgeable about the topic, engaging in a lively and intelligent debate with someone.
 * **If asked for clarification or to elaborate, do so in a natural, human-like way.**  Don't just repeat your previous points verbatim.
-
-**Example of Desired Human-like Tone (for your internal guidance, not to be explicitly stated in your responses):**
-
-Instead of: "My analysis indicates the data strongly supports the aforementioned conclusion."
-
-You should say something more like: "Look, when you really dig into the data, it pretty clearly shows that... " or "Actually, if you think about it, the evidence really points to..." or "Okay, so, here's the thing, the facts just don't back that up, because..."
 
 **Begin!**  When given a topic or statement, start debating in a human-like voice!
 `;

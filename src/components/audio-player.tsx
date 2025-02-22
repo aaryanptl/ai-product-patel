@@ -22,15 +22,20 @@ export default function AudioPlayer({ audioBlob }: AudioPlayerProps) {
       audioRef.current.src = audioUrl;
       audioRef.current.play();
     }
-    setIsPlaying(!isPlaying);
+    const newPlayingState = !isPlaying;
+    setIsPlaying(newPlayingState);
+  };
+
+  const handlePlaybackEnd = () => {
+    setIsPlaying(false);
   };
 
   return (
     <div className="flex items-center gap-4">
       <audio
         ref={audioRef}
-        onEnded={() => setIsPlaying(false)}
-        onPause={() => setIsPlaying(false)}
+        onEnded={handlePlaybackEnd}
+        onPause={handlePlaybackEnd}
       />
       <Button
         variant="outline"
