@@ -10,12 +10,14 @@ interface DebaterProps {
   onTranscriptReceived: (text: string, speaker: "AI" | "Human") => void;
   onAudioResponse: (audioBlob: Blob) => void;
   messages?: Message[];
+  onProcessingChange?: (isProcessing: boolean) => void;
 }
 
 export default function Debater({
   onTranscriptReceived,
   onAudioResponse,
   messages = [],
+  onProcessingChange,
 }: DebaterProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -97,6 +99,7 @@ export default function Debater({
   // Function to handle audio submission and transcription
   const handleAudioSubmission = async (audioBlob: Blob) => {
     setIsProcessing(true);
+    onProcessingChange?.(true);
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob);
@@ -142,6 +145,7 @@ export default function Debater({
       console.error("Error processing audio:", error);
     } finally {
       setIsProcessing(false);
+      onProcessingChange?.(false);
     }
   };
 

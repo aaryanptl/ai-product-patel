@@ -5,11 +5,13 @@ import { motion } from "framer-motion";
 interface SphereVisualizerProps {
   isActive: boolean;
   audioData?: Uint8Array;
+  isProcessing?: boolean;
 }
 
 export default function SphereVisualizer({
   isActive,
   audioData,
+  isProcessing = false,
 }: SphereVisualizerProps) {
   // Create two layers of dots for 3D effect
   const innerDots = Array.from({ length: 40 });
@@ -20,6 +22,12 @@ export default function SphereVisualizer({
     ? audioData.reduce((sum, value) => sum + value, 0) / audioData.length / 255
     : 0;
 
+  // Processing animation values
+  const processingScale = isProcessing ? [1, 1.2, 1] : 1;
+  const processingOpacity = isProcessing ? [0.4, 0.8, 0.4] : 0.4;
+  const processingDuration = isProcessing ? 1.5 : 0;
+  const processingRepeat = isProcessing ? Number.POSITIVE_INFINITY : 0;
+
   return (
     <div className="relative w-full h-full">
       <div className="absolute inset-0 flex items-center justify-center">
@@ -27,19 +35,24 @@ export default function SphereVisualizer({
         <motion.div
           className="relative w-72 h-72"
           animate={{
-            rotate: isActive ? 360 : 0,
+            rotate: isActive || isProcessing ? 360 : 0,
             scale:
-              audioData && isActive ? [1, 1.2 + audioIntensity * 0.4, 1] : 1,
+              audioData && isActive
+                ? [1, 1.2 + audioIntensity * 0.4, 1]
+                : processingScale,
           }}
           transition={{
             rotate: {
-              duration: 25,
+              duration: isProcessing ? 15 : 25,
               repeat: Number.POSITIVE_INFINITY,
               ease: "linear",
             },
             scale: {
-              duration: audioData && isActive ? 0.05 : 0,
-              repeat: audioData && isActive ? Number.POSITIVE_INFINITY : 0,
+              duration: audioData && isActive ? 0.05 : processingDuration,
+              repeat:
+                audioData && isActive
+                  ? Number.POSITIVE_INFINITY
+                  : processingRepeat,
               ease: "easeInOut",
             },
           }}
@@ -70,20 +83,32 @@ export default function SphereVisualizer({
                   opacity:
                     audioData && isActive
                       ? [0.4, 0.9 + frequency * 0.8, 0.4]
-                      : 0.4,
+                      : processingOpacity,
                   scale:
-                    audioData && isActive ? [1, 1.5 + frequency * 1.2, 1] : 1,
-                  background: isActive
-                    ? [
-                        `rgba(74, 222, 128, ${0.6 + (frequency || 0.2) * 0.8})`,
-                        `rgba(52, 211, 153, ${0.6 + (frequency || 0.2) * 0.8})`,
-                        `rgba(74, 222, 128, ${0.6 + (frequency || 0.2) * 0.8})`,
-                      ]
-                    : "rgba(74, 222, 128, 0.6)",
+                    audioData && isActive
+                      ? [1, 1.5 + frequency * 1.2, 1]
+                      : processingScale,
+                  background:
+                    isActive || isProcessing
+                      ? [
+                          `rgba(74, 222, 128, ${
+                            0.6 + (frequency || 0.2) * 0.8
+                          })`,
+                          `rgba(52, 211, 153, ${
+                            0.6 + (frequency || 0.2) * 0.8
+                          })`,
+                          `rgba(74, 222, 128, ${
+                            0.6 + (frequency || 0.2) * 0.8
+                          })`,
+                        ]
+                      : "rgba(74, 222, 128, 0.6)",
                 }}
                 transition={{
-                  duration: audioData && isActive ? 0.05 : 0,
-                  repeat: audioData && isActive ? Number.POSITIVE_INFINITY : 0,
+                  duration: audioData && isActive ? 0.05 : processingDuration,
+                  repeat:
+                    audioData && isActive
+                      ? Number.POSITIVE_INFINITY
+                      : processingRepeat,
                   delay:
                     audioData && isActive ? 0 : i * (1.5 / outerDots.length),
                   ease: "easeInOut",
@@ -101,19 +126,24 @@ export default function SphereVisualizer({
         <motion.div
           className="absolute w-56 h-56"
           animate={{
-            rotate: isActive ? -360 : 0,
+            rotate: isActive || isProcessing ? -360 : 0,
             scale:
-              audioData && isActive ? [1, 1.15 + audioIntensity * 0.3, 1] : 1,
+              audioData && isActive
+                ? [1, 1.15 + audioIntensity * 0.3, 1]
+                : processingScale,
           }}
           transition={{
             rotate: {
-              duration: 20,
+              duration: isProcessing ? 12 : 20,
               repeat: Number.POSITIVE_INFINITY,
               ease: "linear",
             },
             scale: {
-              duration: audioData && isActive ? 0.05 : 0,
-              repeat: audioData && isActive ? Number.POSITIVE_INFINITY : 0,
+              duration: audioData && isActive ? 0.05 : processingDuration,
+              repeat:
+                audioData && isActive
+                  ? Number.POSITIVE_INFINITY
+                  : processingRepeat,
               ease: "easeInOut",
             },
           }}
@@ -143,22 +173,32 @@ export default function SphereVisualizer({
                   opacity:
                     audioData && isActive
                       ? [0.3, 0.8 + frequency * 0.6, 0.3]
-                      : [0.3, 0.5, 0.3],
+                      : processingOpacity,
                   scale:
                     audioData && isActive
                       ? [1, 1.4 + frequency * 0.8, 1]
-                      : [1, 1.1, 1],
-                  background: isActive
-                    ? [
-                        `rgba(52, 211, 153, ${0.5 + (frequency || 0.2) * 0.7})`,
-                        `rgba(74, 222, 128, ${0.5 + (frequency || 0.2) * 0.7})`,
-                        `rgba(52, 211, 153, ${0.5 + (frequency || 0.2) * 0.7})`,
-                      ]
-                    : "rgba(52, 211, 153, 0.5)",
+                      : processingScale,
+                  background:
+                    isActive || isProcessing
+                      ? [
+                          `rgba(52, 211, 153, ${
+                            0.5 + (frequency || 0.2) * 0.7
+                          })`,
+                          `rgba(74, 222, 128, ${
+                            0.5 + (frequency || 0.2) * 0.7
+                          })`,
+                          `rgba(52, 211, 153, ${
+                            0.5 + (frequency || 0.2) * 0.7
+                          })`,
+                        ]
+                      : "rgba(52, 211, 153, 0.5)",
                 }}
                 transition={{
-                  duration: audioData && isActive ? 0.05 : 1.5,
-                  repeat: Number.POSITIVE_INFINITY,
+                  duration: audioData && isActive ? 0.05 : processingDuration,
+                  repeat:
+                    audioData && isActive
+                      ? Number.POSITIVE_INFINITY
+                      : processingRepeat,
                   delay:
                     audioData && isActive ? 0 : i * (1.5 / innerDots.length),
                   ease: "easeInOut",

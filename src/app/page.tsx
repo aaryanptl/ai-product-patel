@@ -16,6 +16,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [audioData, setAudioData] = useState<Uint8Array | undefined>();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -171,24 +172,31 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-6xl space-y-6">
-        <motion.h1
-          className="text-4xl font-bold text-center bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          Human vs AI: The Great Debate
-        </motion.h1>
+        <div className="py-8">
+          <motion.h1
+            className="text-4xl font-bold text-center bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            Human vs AI: The Great Debate
+          </motion.h1>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 bg-zinc-900/50 border-zinc-800 backdrop-blur-xl rounded-3xl">
             <div className="relative aspect-[16/9]">
-              <SphereVisualizer isActive={!!audioData} audioData={audioData} />
+              <SphereVisualizer
+                isActive={!!audioData}
+                audioData={audioData}
+                isProcessing={isProcessing}
+              />
             </div>
             <div className="space-y-4">
               <Debater
                 onTranscriptReceived={handleTranscriptReceived}
                 onAudioResponse={handleAudioResponse}
                 messages={messages}
+                onProcessingChange={setIsProcessing}
               />
             </div>
           </Card>
