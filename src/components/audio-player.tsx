@@ -6,13 +6,9 @@ import { Play, Pause } from "lucide-react";
 
 interface AudioPlayerProps {
   audioBlob: Blob | null;
-  onPlayingChange?: (isPlaying: boolean) => void;
 }
 
-export default function AudioPlayer({
-  audioBlob,
-  onPlayingChange,
-}: AudioPlayerProps) {
+export default function AudioPlayer({ audioBlob }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -28,12 +24,10 @@ export default function AudioPlayer({
     }
     const newPlayingState = !isPlaying;
     setIsPlaying(newPlayingState);
-    onPlayingChange?.(newPlayingState);
   };
 
   const handlePlaybackEnd = () => {
     setIsPlaying(false);
-    onPlayingChange?.(false);
   };
 
   return (

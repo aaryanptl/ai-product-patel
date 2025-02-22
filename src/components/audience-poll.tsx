@@ -17,9 +17,9 @@ export default function AudiencePoll() {
       <h2 className="text-lg text-white font-semibold mb-4">Audience Poll</h2>
       <div className="space-y-4">
         <div className="relative h-12">
-          <div className="absolute inset-0 bg-gray-100 rounded-lg" />
+          <div className="absolute bg-zinc-900 inset-0 rounded-lg" />
           <motion.div
-            className="absolute inset-y-0 left-0 bg-blue-200 rounded-lg"
+            className="absolute inset-y-0 left-0 bg-sky-700 rounded-lg"
             initial={{ width: "0%" }}
             animate={{ width: `${getPercentage(votes.human)}%` }}
             transition={{ duration: 0.5 }}
@@ -31,9 +31,9 @@ export default function AudiencePoll() {
         </div>
 
         <div className="relative h-12">
-          <div className="absolute inset-0 bg-gray-100 rounded-lg" />
+          <div className="absolute inset-0 bg-zinc-900 rounded-lg" />
           <motion.div
-            className="absolute inset-y-0 left-0 bg-green-200 rounded-lg"
+            className="absolute inset-y-0 left-0 bg-emerald-700 rounded-lg"
             initial={{ width: "0%" }}
             animate={{ width: `${getPercentage(votes.ai)}%` }}
             transition={{ duration: 0.5 }}
@@ -47,7 +47,7 @@ export default function AudiencePoll() {
         <div className="grid grid-cols-2 gap-3 mt-4">
           <Button
             variant="outline"
-            className="border-blue-500/50 hover:bg-sky-200"
+            className="border-blue-500/50 hover:bg-sky-600"
             onClick={() =>
               setVotes((prev) => ({ ...prev, human: prev.human + 1 }))
             }
@@ -56,7 +56,7 @@ export default function AudiencePoll() {
           </Button>
           <Button
             variant="outline"
-            className="border-green-500/50 hover:bg-emerald-200"
+            className="border-green-500/50 hover:bg-emerald-600"
             onClick={() => setVotes((prev) => ({ ...prev, ai: prev.ai + 1 }))}
           >
             Vote AI

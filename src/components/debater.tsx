@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Button } from "./ui/button";
 import { Mic, Square } from "lucide-react";
 import { Message } from "ai";
+import AudioVisualizer from "./user-voice-visualizer";
 
 interface DebaterProps {
   onTranscriptReceived: (text: string, speaker: "AI" | "Human") => void;
@@ -18,17 +19,45 @@ export default function Debater({
 }: DebaterProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Function to handle audio recording
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const mediaRecorder = new MediaRecorder(mediaStream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      setStream(mediaStream);
+
+      // Set up audio analysis
+      audioContextRef.current = new (window.AudioContext ||
+        (window as any).webkitAudioContext)();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+
+      const source =
+        audioContextRef.current.createMediaStreamSource(mediaStream);
+      source.connect(analyserRef.current);
+
+      const animate = () => {
+        if (!analyserRef.current || !isRecording) return;
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        onAudioResponse(
+          new Blob([dataArray], { type: "application/octet-stream" })
+        );
+        animationFrameRef.current = requestAnimationFrame(animate);
+      };
+      animate();
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -39,7 +68,16 @@ export default function Debater({
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
         await handleAudioSubmission(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
+        mediaStream.getTracks().forEach((track) => track.stop());
+        setStream(null);
+
+        // Clean up audio analysis
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+        if (audioContextRef.current) {
+          audioContextRef.current.close();
+        }
       };
 
       mediaRecorder.start();
@@ -99,12 +137,6 @@ export default function Debater({
         const response = await fetch(audioUrl);
         const audioBlob = await response.blob();
         onAudioResponse(audioBlob);
-
-        // Play the audio
-        const audio = new Audio(audioUrl);
-        audio.play().catch((err) => {
-          console.error("Error playing audio:", err);
-        });
       }
     } catch (error) {
       console.error("Error processing audio:", error);
@@ -115,6 +147,9 @@ export default function Debater({
 
   return (
     <div className="space-y-4">
+      <div className="w-full max-w-2xl mx-auto">
+        <AudioVisualizer stream={stream} />
+      </div>
       <div className="flex justify-center items-center">
         <Button
           onClick={isRecording ? stopRecording : startRecording}
@@ -152,12 +187,6 @@ export default function Debater({
         </Button>
       </div>
       <audio ref={audioRef} className="hidden" />
-
-      {isProcessing && (
-        <div className="text-center text-sm text-zinc-400">
-          Processing your speech...
-        </div>
-      )}
     </div>
   );
 }

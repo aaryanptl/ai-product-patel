@@ -1,22 +1,23 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
-import AudioPlayer from "./AudioPlayer";
+import { useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Play, Pause } from "lucide-react";
 
 interface LiveTranscriptProps {
   transcript: Array<{ text: string; speaker: "AI" | "Human" }>;
-  audioResponse: Blob | null;
+  isPlaying: boolean;
+  onTogglePlayback: () => void;
 }
 
 export default function LiveTranscript({
   transcript,
-  audioResponse,
+  isPlaying,
+  onTogglePlayback,
 }: LiveTranscriptProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const [isAISpeaking, setIsAISpeaking] = useState(false);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -31,18 +32,19 @@ export default function LiveTranscript({
           <h2 className="text-lg font-semibold text-zinc-300">
             Live Transcript
           </h2>
-          {isAISpeaking && (
-            <span className="text-sm text-emerald-400 animate-pulse">
-              AI Speaking...
-            </span>
-          )}
         </div>
-        {audioResponse && (
-          <AudioPlayer
-            audioBlob={audioResponse}
-            onPlayingChange={setIsAISpeaking}
-          />
-        )}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={onTogglePlayback}
+          className="size-8 rounded-full"
+        >
+          {isPlaying ? (
+            <Pause className="w-5 h-5" />
+          ) : (
+            <Play className="w-5 h-5" />
+          )}
+        </Button>
       </div>
 
       <div
