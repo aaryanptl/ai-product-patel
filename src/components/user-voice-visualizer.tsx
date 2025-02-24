@@ -26,7 +26,7 @@ export default function AudioVisualizer({
       <Visualizer
         audio={audio}
         mode="current"
-        strokeColor="#4ade80"
+        strokeColor="#14b8a6"
         autoStart={true}
         rectWidth={2}
       >

@@ -33,7 +33,7 @@ export default function AudiencePoll() {
         <div className="relative h-12">
           <div className="absolute inset-0 bg-zinc-900 rounded-lg" />
           <motion.div
-            className="absolute inset-y-0 left-0 bg-emerald-700 rounded-lg"
+            className="absolute inset-y-0 left-0 bg-teal-700 rounded-lg"
             initial={{ width: "0%" }}
             animate={{ width: `${getPercentage(votes.ai)}%` }}
             transition={{ duration: 0.5 }}
@@ -56,7 +56,7 @@ export default function AudiencePoll() {
           </Button>
           <Button
             variant="outline"
-            className="border-green-500/50 hover:bg-emerald-600"
+            className="border-teal-500/50 hover:bg-teal-600"
             onClick={() => setVotes((prev) => ({ ...prev, ai: prev.ai + 1 }))}
           >
             Vote AI

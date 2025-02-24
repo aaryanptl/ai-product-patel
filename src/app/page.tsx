@@ -3,7 +3,7 @@
 import AudiencePoll from "@/components/audience-poll";
 import Debater from "@/components/debater";
 import LiveTranscript from "@/components/live-transcript";
-import SphereVisualizer from "@/components/sphere-visualizer";
+import AudioVisualizer from "@/components/audio-visualizer";
 import { Card } from "@/components/ui/card";
 import { Message } from "ai";
 import { motion } from "framer-motion";
@@ -174,7 +174,7 @@ export default function Home() {
       <div className="w-full max-w-6xl space-y-6">
         <div className="py-8">
           <motion.h1
-            className="text-4xl font-bold text-center bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent"
+            className="text-4xl font-bold text-center bg-gradient-to-r from-teal-400 to-emerald-500 bg-clip-text text-transparent"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -183,14 +183,12 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 bg-zinc-900/50 border-zinc-800 backdrop-blur-xl rounded-3xl">
-            <div className="relative aspect-[16/9]">
-              <SphereVisualizer
-                isActive={!!audioData}
-                audioData={audioData}
-                isProcessing={isProcessing}
-              />
-            </div>
+          <Card className="lg:col-span-2 bg-zinc-900/50 border-zinc-800 backdrop-blur-xl rounded-3xl overflow-hidden">
+            <AudioVisualizer
+              isActive={!!audioData && isPlaying}
+              audioData={audioData}
+              isProcessing={isProcessing}
+            />
             <div className="space-y-4">
               <Debater
                 onTranscriptReceived={handleTranscriptReceived}
