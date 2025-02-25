@@ -57,7 +57,19 @@ export default function Home() {
     if (isPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play().catch(console.error);
+      // If we have a valid audio reference but it's not playing, start it
+      if (audioRef.current.src) {
+        audioRef.current.currentTime = 0; // Start from the beginning
+        audioRef.current.play().catch((error) => {
+          console.error("Error playing audio:", error);
+        });
+      } else if (currentAudioUrlRef.current) {
+        // If audio source was cleared but we still have the URL
+        audioRef.current.src = currentAudioUrlRef.current;
+        audioRef.current.play().catch((error) => {
+          console.error("Error playing audio:", error);
+        });
+      }
     }
   };
 
@@ -72,15 +84,17 @@ export default function Home() {
       return;
     }
 
+    // Store the current audio blob for later playback if needed
+    if (!audioBlob) return;
+
     // First, clean up everything
     const cleanup = async () => {
+      // Keep the current audio URL reference for replay capability
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.src = "";
+        // Don't clear the src here to allow for replay
       }
-      if (currentAudioUrlRef.current) {
-        URL.revokeObjectURL(currentAudioUrlRef.current);
-      }
+
       if (audioSourceRef.current) {
         audioSourceRef.current.disconnect();
         audioSourceRef.current = null;
@@ -102,6 +116,11 @@ export default function Home() {
     };
 
     await cleanup();
+
+    // Revoke previous URL to prevent memory leaks
+    if (currentAudioUrlRef.current) {
+      URL.revokeObjectURL(currentAudioUrlRef.current);
+    }
 
     // Create new audio context and elements
     audioContextRef.current = new (window.AudioContext ||
@@ -155,7 +174,8 @@ export default function Home() {
       }
       setIsPlaying(false);
       setAudioData(undefined);
-      await cleanup();
+      // Don't run the full cleanup here to allow replaying the audio
+      // Just stop the animation and update state
     });
 
     // Start playback
@@ -163,9 +183,10 @@ export default function Home() {
       await audio.play();
     } catch (error) {
       console.error("Error playing audio:", error);
+      // Don't clear audio state on autoplay failure
+      // This allows manual play button to work even if autoplay fails
       setIsPlaying(false);
       setAudioData(undefined);
-      await cleanup();
     }
   };
 
