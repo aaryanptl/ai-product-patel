@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import { Mic, Square } from "lucide-react";
 import { Message } from "ai";
 import AudioVisualizer from "./user-voice-visualizer";
+import useWebRTCAudioSession from "@/hooks/use-webrtc";
 
 interface DebaterProps {
   onTranscriptReceived: (text: string, speaker: "AI" | "Human") => void;
   onAudioResponse: (audioBlob: Blob) => void;
   messages?: Message[];
   onProcessingChange?: (isProcessing: boolean) => void;
+  onAiTypingChange?: (isTyping: boolean) => void;
 }
 
 export default function Debater({
@@ -18,146 +20,123 @@ export default function Debater({
   onAudioResponse,
   messages = [],
   onProcessingChange,
+  onAiTypingChange,
 }: DebaterProps) {
-  const [isRecording, setIsRecording] = useState(false);
+  const [voice, setVoice] = useState("alloy");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [audioData, setAudioData] = useState<Uint8Array | undefined>();
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const [userInput, setUserInput] = useState("");
+  const lastVolumeUpdateRef = useRef(0);
+  const lastSentVolumeRef = useRef(0);
 
-  // Function to handle audio recording
-  const startRecording = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
-      const mediaRecorder = new MediaRecorder(mediaStream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      setStream(mediaStream);
+  // Keep track of the current assistant message that's being built
+  const currentAssistantMessageRef = useRef<string>("");
+  const [assistantIsResponding, setAssistantIsResponding] = useState(false);
 
-      // Set up audio analysis
-      audioContextRef.current = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 256;
+  // Use our WebRTC hook
+  const {
+    status,
+    isSessionActive,
+    audioIndicatorRef,
+    handleStartStopClick,
+    conversation,
+    currentVolume,
+    sendTextMessage,
+  } = useWebRTCAudioSession(voice);
 
-      const source =
-        audioContextRef.current.createMediaStreamSource(mediaStream);
-      source.connect(analyserRef.current);
+  // When the conversation updates, process the messages
+  useEffect(() => {
+    if (conversation.length === 0) return;
 
-      const animate = () => {
-        if (!analyserRef.current || !isRecording) return;
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-        analyserRef.current.getByteFrequencyData(dataArray);
-        onAudioResponse(
-          new Blob([dataArray], { type: "application/octet-stream" })
-        );
-        animationFrameRef.current = requestAnimationFrame(animate);
-      };
-      animate();
+    const latestMessage = conversation[conversation.length - 1];
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
+    if (!latestMessage.text) return;
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
-        await handleAudioSubmission(audioBlob);
-        mediaStream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-
-        // Clean up audio analysis
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-        if (audioContextRef.current) {
-          audioContextRef.current.close();
-        }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error("Error accessing microphone:", error);
+    // Handle user messages - send these through immediately
+    if (latestMessage.role === "user" && latestMessage.isFinal) {
+      onTranscriptReceived(latestMessage.text, "Human");
+      return;
     }
-  };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    // Handle assistant messages
+    if (latestMessage.role === "assistant") {
+      // If the message is final, send the complete message
+      if (latestMessage.isFinal) {
+        setAssistantIsResponding(false);
+        onAiTypingChange?.(false);
+        onTranscriptReceived(latestMessage.text, "AI");
+        currentAssistantMessageRef.current = "";
+      } else {
+        // Otherwise, mark that the assistant is responding but don't send the partial message
+        setAssistantIsResponding(true);
+        onAiTypingChange?.(true);
+        currentAssistantMessageRef.current = latestMessage.text;
+      }
     }
-  };
+  }, [conversation, onTranscriptReceived, onAiTypingChange]);
 
-  // Function to handle audio submission and transcription
-  const handleAudioSubmission = async (audioBlob: Blob) => {
-    setIsProcessing(true);
-    onProcessingChange?.(true);
-    try {
-      const formData = new FormData();
-      formData.append("audio", audioBlob);
-      formData.append("messages", JSON.stringify(messages));
+  // Update processing state
+  useEffect(() => {
+    const isProc =
+      status.includes("Requesting") ||
+      status.includes("Fetching") ||
+      status.includes("Establishing");
+    setIsProcessing(isProc);
+    onProcessingChange?.(isProc);
+  }, [status, onProcessingChange]);
 
-      const response = await fetch("/api/chat/debater", {
-        method: "POST",
-        body: formData,
-      });
+  // Throttled function to send audio visualization data
+  const sendVisualizationData = useCallback(() => {
+    if (!isSessionActive) return;
 
-      if (!response.ok) {
-        throw new Error("Failed to process audio");
-      }
+    const now = Date.now();
+    // Only send visualization updates every 100ms to prevent infinite loops
+    if (now - lastVolumeUpdateRef.current < 100) return;
+    lastVolumeUpdateRef.current = now;
 
-      const data = await response.json();
+    // Only send if volume has changed significantly
+    if (Math.abs(currentVolume - lastSentVolumeRef.current) < 0.05) return;
+    lastSentVolumeRef.current = currentVolume;
 
-      // Handle transcribed text
-      if (data.transcribedText) {
-        onTranscriptReceived(data.transcribedText, "Human");
-      }
+    // Create dummy data for visualization based on volume
+    const dataSize = 128;
+    const volumeData = new Uint8Array(dataSize);
+    const scaledVolume = Math.min(255, Math.floor(currentVolume * 255));
 
-      // Handle AI response text
-      if (data.aiText) {
-        onTranscriptReceived(data.aiText, "AI");
-      }
+    for (let i = 0; i < dataSize; i++) {
+      volumeData[i] = Math.floor(Math.random() * scaledVolume);
+    }
 
-      // Handle audio response
-      if (data.audio) {
-        let audioUrl;
-        if (data.audio.startsWith("http") || data.audio.startsWith("data:")) {
-          audioUrl = data.audio;
-        } else {
-          const mimeType = "audio/wav";
-          audioUrl = `data:${mimeType};base64,${data.audio}`;
-        }
+    onAudioResponse(
+      new Blob([volumeData], { type: "application/octet-stream" })
+    );
+  }, [currentVolume, isSessionActive, onAudioResponse]);
 
-        // Convert base64 to blob
-        const response = await fetch(audioUrl);
-        const audioBlob = await response.blob();
-        onAudioResponse(audioBlob);
-      }
-    } catch (error) {
-      console.error("Error processing audio:", error);
-    } finally {
-      setIsProcessing(false);
-      onProcessingChange?.(false);
+  // Send audio visualization data with throttling
+  useEffect(() => {
+    if (isSessionActive && currentVolume > 0) {
+      sendVisualizationData();
+    }
+  }, [currentVolume, isSessionActive, sendVisualizationData]);
+
+  // Handle text submission
+  const handleSubmitText = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userInput.trim() && isSessionActive) {
+      sendTextMessage(userInput.trim());
+      setUserInput("");
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="w-full max-w-2xl mx-auto">
-        <AudioVisualizer stream={stream} />
+        <div ref={audioIndicatorRef} className="audio-indicator">
+          <AudioVisualizer stream={null} />
+        </div>
       </div>
-      <div className="flex justify-center items-center">
+      <div className="flex justify-center items-center space-x-4">
         <Button
-          onClick={isRecording ? stopRecording : startRecording}
+          onClick={handleStartStopClick}
           disabled={isProcessing}
           variant="ghost"
           size="lg"
@@ -165,33 +144,75 @@ export default function Debater({
             relative w-16 h-16 rounded-full p-0 
             transition-all duration-200 ease-in-out
             hover:bg-slate-100 dark:hover:bg-slate-800
-            ${isRecording ? "bg-red-500/10" : "bg-slate-50 dark:bg-slate-900"}
+            ${
+              isSessionActive
+                ? "bg-red-500/10 border-2 border-red-500"
+                : "bg-green-500/10 border-2 border-green-500"
+            }
             ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}
           `}
         >
           <div
             className={`
             absolute inset-0 rounded-full
-            ${isRecording ? "animate-ping bg-red-500/30" : ""}
+            ${isSessionActive ? "animate-ping bg-red-500/30" : ""}
           `}
           />
-          {isRecording ? (
+          {isSessionActive ? (
             <Square className="w-5 h-5 text-red-500 relative z-10" />
           ) : (
             <Mic
               className={`
               w-5 h-5 relative z-10
-              ${
-                isProcessing
-                  ? "text-slate-400"
-                  : "text-slate-700 dark:text-slate-300"
-              }
+              ${isProcessing ? "text-slate-400" : "text-green-500"}
             `}
             />
           )}
         </Button>
       </div>
-      <audio ref={audioRef} className="hidden" />
+
+      <div className="text-center text-sm font-medium">
+        {isSessionActive ? (
+          <p className="text-red-500">Session Active - Click square to end</p>
+        ) : (
+          <p className="text-green-500">Click mic to start conversation</p>
+        )}
+      </div>
+
+      {isSessionActive && (
+        <div className="flex justify-center mt-4">
+          <form onSubmit={handleSubmitText} className="w-full max-w-md">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                className="w-full p-2 rounded-md bg-black/20 border border-gray-700 text-white"
+                placeholder={
+                  assistantIsResponding
+                    ? "AI is responding..."
+                    : "Type a message to send..."
+                }
+                disabled={assistantIsResponding}
+              />
+              <Button
+                type="submit"
+                disabled={!userInput.trim() || assistantIsResponding}
+              >
+                Send
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+      <div className="text-center text-sm text-gray-500">
+        {status && <p>{status}</p>}
+        {assistantIsResponding && (
+          <p className="text-green-500 animate-pulse mt-1">
+            AI is responding...
+          </p>
+        )}
+      </div>
     </div>
   );
 }

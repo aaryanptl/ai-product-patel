@@ -1,24 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Human vs AI: The Great Debate
+
+A real-time AI debating application that uses OpenAI's real-time voice-to-voice capabilities. This application enables users to have a natural conversation with an AI debater that responds with personality and wit.
+
+## Features
+
+- Real-time voice-to-voice interaction using OpenAI's Realtime API
+- WebRTC-based audio streaming for low-latency communication
+- Live transcript display of the conversation
+- Interactive audio visualizer for voice input and output
+- Audience poll system
+
+## Technology Stack
+
+- **Frontend**: React, Next.js, TailwindCSS
+- **Real-time Communication**: WebRTC, OpenAI Realtime API
+- **State Management**: React Hooks
+- **Styling**: TailwindCSS, Framer Motion for animations
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js 18.x or higher
+- OpenAI API key with access to the Realtime API
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   git clone https://github.com/yourusername/human-vs-ai-debate.git
+   cd human-vs-ai-debate
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   # or if you use pnpm
+   pnpm install
+   ```
+
+3. Create a `.env.local` file in the root directory with the following:
+
+   ```
+   OPENAI_API_KEY=your_openai_api_key
+   ```
+
+4. Start the development server:
+
+   ```bash
+   npm run dev
+   # or if you use pnpm
+   pnpm dev
+   ```
+
+5. Open your browser and navigate to `http://localhost:3000`
+
+## How It Works
+
+1. The application establishes a WebRTC connection with OpenAI's Realtime API when you click the microphone button.
+2. Your voice is streamed directly to OpenAI's servers for real-time processing.
+3. The AI model processes your speech, generates a response, and speaks back to you through the same WebRTC connection.
+4. All transcripts of the conversation are displayed in the live transcript panel.
+
+## Environment Variables
+
+- `OPENAI_API_KEY`: Your OpenAI API key with access to the Realtime API
+
+## Project Structure
+
+- `src/app`: Contains the Next.js pages and API routes
+- `src/components`: React components including the debater interface
+- `src/lib`: Utility functions for WebRTC and the Realtime API
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Learn More
 

@@ -7,188 +7,125 @@ import AudioVisualizer from "@/components/audio-visualizer";
 import { Card } from "@/components/ui/card";
 import { Message } from "ai";
 import { motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 export default function Home() {
   const [transcript, setTranscript] = useState<
-    Array<{ text: string; speaker: "AI" | "Human" }>
+    Array<{ text: string; speaker: "AI" | "Human"; timestamp?: number }>
   >([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [audioData, setAudioData] = useState<Uint8Array | undefined>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const currentAudioUrlRef = useRef<string | null>(null);
+  const [aiIsTyping, setAiIsTyping] = useState(false);
+  const lastAudioUpdateTimeRef = useRef(0);
 
-  useEffect(() => {
-    // Clean up on unmount
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+  // Track AI responses to prevent duplicates
+  const lastTranscriptTimestampRef = useRef(0);
+
+  // Handle when a new transcript is received
+  const handleTranscriptReceived = useCallback(
+    (text: string, speaker: "AI" | "Human") => {
+      if (!text.trim()) return;
+
+      const now = Date.now();
+
+      // Prevent duplicates and rapid updates
+      if (now - lastTranscriptTimestampRef.current < 300) {
+        return;
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      lastTranscriptTimestampRef.current = now;
+
+      // Add to transcript with timestamp for ordering and duplicate detection
+      setTranscript((prev) => {
+        // Check for duplicates or very similar messages (AI often repeats with small changes)
+        const isDuplicate = prev.some((item) => {
+          if (item.speaker !== speaker) return false;
+
+          // For AI, check if the message is very similar (fuzzy match)
+          if (speaker === "AI") {
+            // Compare removing spaces and punctuation
+            const normalize = (str: string) =>
+              str.toLowerCase().replace(/[^\w]/g, "");
+            const similarity =
+              normalize(item.text).includes(normalize(text)) ||
+              normalize(text).includes(normalize(item.text));
+
+            // If texts are similar and within 2 seconds, consider it a duplicate
+            return similarity && item.timestamp && now - item.timestamp < 2000;
+          }
+
+          // For humans, exact match is enough
+          return item.text === text;
+        });
+
+        if (isDuplicate) return prev;
+
+        return [...prev, { text, speaker, timestamp: now }];
+      });
+
+      // Add message to chat history
+      const newMessage: Message = {
+        id: `${speaker}-${now}`,
+        role: speaker === "AI" ? "assistant" : "user",
+        content: text,
+      };
+
+      setMessages((prev) => {
+        // Check for exact duplicates in messages
+        if (
+          prev.some(
+            (msg) => msg.content === text && msg.role === newMessage.role
+          )
+        ) {
+          return prev;
+        }
+        return [...prev, newMessage];
+      });
+    },
+    []
+  );
+
+  // Handle audio data for visualization with throttling
+  const handleAudioResponse = useCallback(
+    async (audioBlob: Blob) => {
+      if (audioBlob.type === "application/octet-stream") {
+        // Throttle updates to prevent excessive re-renders
+        const now = Date.now();
+        if (now - lastAudioUpdateTimeRef.current < 50) {
+          return; // Skip this update if less than 50ms since last update
+        }
+        lastAudioUpdateTimeRef.current = now;
+
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        setAudioData(uint8Array);
+
+        // Don't set isPlaying in every audio update to avoid loops
+        if (!isPlaying) {
+          setIsPlaying(true);
+        }
       }
-      if (currentAudioUrlRef.current) {
-        URL.revokeObjectURL(currentAudioUrlRef.current);
-      }
-    };
+    },
+    [isPlaying]
+  );
+
+  // Toggle playback for transcript UI (doesn't actually affect audio)
+  const togglePlayback = useCallback(() => {
+    setIsPlaying((prev) => !prev);
   }, []);
 
-  const handleTranscriptReceived = (text: string, speaker: "AI" | "Human") => {
-    setTranscript((prev) => [...prev, { text, speaker }]);
-
-    // Add message to chat history
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      role: speaker === "AI" ? "assistant" : "user",
-      content: text,
-    };
-    setMessages((prev) => [...prev, newMessage]);
-  };
-
-  const togglePlayback = () => {
-    if (!audioRef.current) return;
-
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      // If we have a valid audio reference but it's not playing, start it
-      if (audioRef.current.src) {
-        audioRef.current.currentTime = 0; // Start from the beginning
-        audioRef.current.play().catch((error) => {
-          console.error("Error playing audio:", error);
-        });
-      } else if (currentAudioUrlRef.current) {
-        // If audio source was cleared but we still have the URL
-        audioRef.current.src = currentAudioUrlRef.current;
-        audioRef.current.play().catch((error) => {
-          console.error("Error playing audio:", error);
-        });
-      }
-    }
-  };
-
-  const handleAudioResponse = async (audioBlob: Blob) => {
-    // Check if this is real-time audio data
-    if (audioBlob.type === "application/octet-stream") {
-      // Handle real-time audio data for visualization
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      setAudioData(uint8Array);
+  // Reset playing status when processing stops, but only once
+  useEffect(() => {
+    if (!isProcessing && !isPlaying) {
       setIsPlaying(true);
-      return;
     }
+  }, [isProcessing, isPlaying]);
 
-    // Store the current audio blob for later playback if needed
-    if (!audioBlob) return;
-
-    // First, clean up everything
-    const cleanup = async () => {
-      // Keep the current audio URL reference for replay capability
-      if (audioRef.current) {
-        audioRef.current.pause();
-        // Don't clear the src here to allow for replay
-      }
-
-      if (audioSourceRef.current) {
-        audioSourceRef.current.disconnect();
-        audioSourceRef.current = null;
-      }
-      if (analyserRef.current) {
-        analyserRef.current.disconnect();
-        analyserRef.current = null;
-      }
-      if (audioContextRef.current) {
-        await audioContextRef.current.close();
-        audioContextRef.current = null;
-      }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      setAudioData(undefined);
-      setIsPlaying(false);
-    };
-
-    await cleanup();
-
-    // Revoke previous URL to prevent memory leaks
-    if (currentAudioUrlRef.current) {
-      URL.revokeObjectURL(currentAudioUrlRef.current);
-    }
-
-    // Create new audio context and elements
-    audioContextRef.current = new (window.AudioContext ||
-      (window as any).webkitAudioContext)();
-
-    analyserRef.current = audioContextRef.current.createAnalyser();
-    analyserRef.current.fftSize = 256;
-
-    // Create and set up audio element
-    const audio = new Audio();
-    const audioUrl = URL.createObjectURL(audioBlob);
-    audio.src = audioUrl;
-    currentAudioUrlRef.current = audioUrl;
-    audioRef.current = audio;
-
-    // Connect the audio pipeline
-    audioSourceRef.current =
-      audioContextRef.current.createMediaElementSource(audio);
-    audioSourceRef.current.connect(analyserRef.current);
-    analyserRef.current.connect(audioContextRef.current.destination);
-
-    // Set up the animation loop
-    const animate = () => {
-      if (!analyserRef.current) return;
-
-      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-      analyserRef.current.getByteFrequencyData(dataArray);
-      setAudioData(dataArray);
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-
-    // Set up event listeners
-    audio.addEventListener("play", () => {
-      setIsPlaying(true);
-      animate();
-    });
-
-    audio.addEventListener("pause", () => {
-      setIsPlaying(false);
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      setAudioData(undefined);
-    });
-
-    audio.addEventListener("ended", async () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      setIsPlaying(false);
-      setAudioData(undefined);
-      // Don't run the full cleanup here to allow replaying the audio
-      // Just stop the animation and update state
-    });
-
-    // Start playback
-    try {
-      await audio.play();
-    } catch (error) {
-      console.error("Error playing audio:", error);
-      // Don't clear audio state on autoplay failure
-      // This allows manual play button to work even if autoplay fails
-      setIsPlaying(false);
-      setAudioData(undefined);
-    }
-  };
+  // Handle AI typing state changes
+  const handleAiTypingChange = useCallback((isTyping: boolean) => {
+    setAiIsTyping(isTyping);
+  }, []);
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
@@ -210,12 +147,13 @@ export default function Home() {
               audioData={audioData}
               isProcessing={isProcessing}
             />
-            <div className="space-y-4">
+            <div className="p-6 space-y-4">
               <Debater
                 onTranscriptReceived={handleTranscriptReceived}
                 onAudioResponse={handleAudioResponse}
                 messages={messages}
                 onProcessingChange={setIsProcessing}
+                onAiTypingChange={handleAiTypingChange}
               />
             </div>
           </Card>
@@ -225,6 +163,7 @@ export default function Home() {
               transcript={transcript}
               isPlaying={isPlaying}
               onTogglePlayback={togglePlayback}
+              aiIsTyping={aiIsTyping}
             />
             <AudiencePoll />
           </div>
