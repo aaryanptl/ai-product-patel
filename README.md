@@ -29,7 +29,7 @@ A real-time AI debating application that uses OpenAI's real-time voice-to-voice 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/human-vs-ai-debate.git
+   git clone https://github.com/Aaryan6/realtime-ai-debater.git
    cd human-vs-ai-debate
    ```
 
