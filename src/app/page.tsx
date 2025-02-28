@@ -17,6 +17,13 @@ import Debater from "@/components/debater";
 import LiveTranscript from "@/components/live-transcript";
 import AudiencePoll from "@/components/audience-poll";
 import AudioVisualizer from "@/components/audio-visualizer";
+import { createClient } from "@supabase/supabase-js";
+import { Database } from "@/types/supabase";
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 export default function Home() {
   const [transcript, setTranscript] = useState<
@@ -29,11 +36,9 @@ export default function Home() {
   const [aiIsTyping, setAiIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const lastAudioUpdateTimeRef = useRef(0);
+  const [currentDebateId, setCurrentDebateId] = useState<string | null>(null);
 
   // For the new UI
-  const [humanVotes, setHumanVotes] = useState(0);
-  const [aiVotes, setAiVotes] = useState(0);
-  const [totalVotes, setTotalVotes] = useState(0);
   const [activeTab, setActiveTab] = useState("summary");
   const [audioLevel, setAudioLevel] = useState(0);
 
@@ -49,15 +54,55 @@ export default function Home() {
   const userAudioBufferRef = useRef<Blob[]>([]);
   const aiAudioBufferRef = useRef<Blob[]>([]);
 
-  // Simulate voting
-  const handleVote = (type: "human" | "ai") => {
-    if (type === "human") {
-      setHumanVotes((prev) => prev + 1);
-    } else {
-      setAiVotes((prev) => prev + 1);
-    }
-    setTotalVotes((prev) => prev + 1);
-  };
+  // Create or get active debate
+  useEffect(() => {
+    const initializeDebate = async () => {
+      try {
+        // Check for active debate
+        const { data: existingDebate, error } = await supabase
+          .from("rt_debates")
+          .select("id, title")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!error && existingDebate) {
+          console.log("Found existing debate:", existingDebate);
+          setCurrentDebateId(existingDebate.id);
+          return existingDebate.id;
+        } else {
+          console.log("No active debate found, creating new one");
+          // Create a new debate
+          const { data: newDebate, error: createError } = await supabase
+            .from("rt_debates")
+            .insert({
+              title: "Human vs AI: The Great Debate",
+              description:
+                "Live debate between human intelligence and artificial intelligence",
+              is_active: true,
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            console.error("Error creating debate:", createError);
+            throw createError;
+          }
+
+          console.log("Created new debate:", newDebate);
+          setCurrentDebateId(newDebate.id);
+          return newDebate.id;
+        }
+      } catch (error) {
+        console.error("Error initializing debate:", error);
+        return null;
+      }
+    };
+
+    // Initialize the debate
+    initializeDebate();
+  }, []);
 
   // Handle when a new transcript is received
   const handleTranscriptReceived = useCallback(
@@ -389,83 +434,15 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <div className="p-4 border-b border-gray-800">
-                <h2 className="font-semibold text-white">Audience Poll</h2>
-              </div>
-
-              <div className="p-4 space-y-4">
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-300">
-                      Human Arguments
-                    </span>
-                    <span className="text-sm font-medium">
-                      {totalVotes > 0
-                        ? Math.round((humanVotes / totalVotes) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-blue-600"
-                      initial={{ width: "0%" }}
-                      animate={{
-                        width:
-                          totalVotes > 0
-                            ? `${(humanVotes / totalVotes) * 100}%`
-                            : "0%",
-                      }}
-                      transition={{ duration: 0.5 }}
-                    />
-                  </div>
+              {currentDebateId ? (
+                <AudiencePoll debateId={currentDebateId} />
+              ) : (
+                <div className="p-4">
+                  <h2 className="text-lg text-white font-semibold">
+                    Loading debate...
+                  </h2>
                 </div>
-
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-300">AI Arguments</span>
-                    <span className="text-sm font-medium">
-                      {totalVotes > 0
-                        ? Math.round((aiVotes / totalVotes) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500"
-                      initial={{ width: "0%" }}
-                      animate={{
-                        width:
-                          totalVotes > 0
-                            ? `${(aiVotes / totalVotes) * 100}%`
-                            : "0%",
-                      }}
-                      transition={{ duration: 0.5 }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <motion.button
-                    className="py-2 px-4 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleVote("human")}
-                  >
-                    Vote Human
-                  </motion.button>
-
-                  <motion.button
-                    className="py-2 px-4 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium text-sm hover:from-emerald-600 hover:to-teal-600 transition-colors"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleVote("ai")}
-                  >
-                    Vote AI
-                  </motion.button>
-                </div>
-              </div>
+              )}
             </motion.div>
           </div>
         </div>
