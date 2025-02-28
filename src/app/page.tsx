@@ -182,6 +182,19 @@ export default function Home() {
   // Modified function to handle audio response and collect audio data
   const handleAudioResponse = useCallback(
     async (audioBlob: Blob) => {
+      if (audioBlob.size === 0) {
+        // When we receive an empty blob, clear with a small delay
+        setTimeout(() => {
+          setAudioData(undefined);
+          setIsPlaying(false);
+          setAudioLevel(0);
+          // Also clear the audio buffers
+          userAudioBufferRef.current = [];
+          aiAudioBufferRef.current = [];
+        }, 100); // Small delay to ensure smooth transition
+        return;
+      }
+
       if (audioBlob.type === "application/octet-stream") {
         // Throttle updates to prevent excessive re-renders
         const now = Date.now();
@@ -192,16 +205,25 @@ export default function Home() {
 
         const arrayBuffer = await audioBlob.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
-        setAudioData(uint8Array);
 
-        // Set audio level for visualization (simplified calculation)
-        const sum = uint8Array.reduce((acc, val) => acc + val, 0);
-        const avg = sum / uint8Array.length / 255;
-        setAudioLevel(avg);
+        // Only update audio data if there's actual audio content or if AI is typing
+        if (uint8Array.some((val) => val > 0) || aiIsTyping) {
+          setAudioData(uint8Array);
+          // Set audio level for visualization (simplified calculation)
+          const sum = uint8Array.reduce((acc, val) => acc + val, 0);
+          const avg = sum / uint8Array.length / 255;
 
-        // Don't set isPlaying in every audio update to avoid loops
-        if (!isPlaying) {
+          // Ensure minimum level while AI is active and smooth transitions
+          const level = aiIsTyping ? Math.max(0.2, avg) : avg;
+          setAudioLevel(level);
           setIsPlaying(true);
+        } else if (!aiIsTyping) {
+          // Only clear visualization if AI is not typing, with a small delay
+          setTimeout(() => {
+            setAudioData(undefined);
+            setAudioLevel(0);
+            setIsPlaying(false);
+          }, 100);
         }
 
         // Collect audio data for the current speaker
@@ -212,7 +234,6 @@ export default function Home() {
         }
       } else if (audioBlob.type.startsWith("audio/")) {
         // This is actual audio data (not visualization data)
-        // Determine if it's from user or AI based on current speaker
         if (lastSpeakerRef.current === "Human") {
           userAudioBufferRef.current.push(audioBlob);
         } else if (lastSpeakerRef.current === "AI") {
@@ -220,7 +241,7 @@ export default function Home() {
         }
       }
     },
-    [isPlaying]
+    [aiIsTyping]
   );
 
   // Toggle playback for transcript UI (doesn't actually affect audio)
@@ -269,6 +290,20 @@ export default function Home() {
   const handleAiTypingChange = useCallback((isTyping: boolean) => {
     setAiIsTyping(isTyping);
   }, []);
+
+  // Reset audio data when AI stops speaking to hide the visualizer
+  useEffect(() => {
+    if (!aiIsTyping) {
+      // Add a delay before clearing the visualization
+      const timer = setTimeout(() => {
+        setAudioData(undefined);
+        setIsPlaying(false);
+        setAudioLevel(0);
+      }, 1000); // 1 second delay to match other timeouts
+
+      return () => clearTimeout(timer);
+    }
+  }, [aiIsTyping]);
 
   // Function to process collected audio buffer and convert to base64
   const processAudioBuffer = useCallback((speaker: "AI" | "Human") => {
@@ -336,9 +371,12 @@ export default function Home() {
                 <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
                   <div className="w-full h-full pointer-events-none flex items-center justify-center">
                     <AudioVisualizer
-                      isActive={!!audioData && isPlaying}
+                      isActive={
+                        !!audioData && isPlaying && (isListening || aiIsTyping)
+                      }
                       audioData={audioData}
                       isProcessing={isProcessing}
+                      isGenerating={aiIsTyping}
                     />
                   </div>
                 </div>

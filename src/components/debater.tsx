@@ -41,6 +41,7 @@ export default function Debater({
     conversation,
     currentVolume,
     sendTextMessage,
+    isAudioPlaying,
   } = useWebRTCAudioSession(voice);
 
   // When the conversation updates, process the messages
@@ -53,7 +54,13 @@ export default function Debater({
 
     // Handle user messages - send these through immediately
     if (latestMessage.role === "user" && latestMessage.isFinal) {
+      console.log("👤 [Audio Status] Processing final user message");
       onTranscriptReceived(latestMessage.text, "Human");
+      // Only reset audio when switching from AI to user
+      if (currentAssistantMessageRef.current) {
+        onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+        currentAssistantMessageRef.current = "";
+      }
       return;
     }
 
@@ -61,18 +68,36 @@ export default function Debater({
     if (latestMessage.role === "assistant") {
       // If the message is final, send the complete message
       if (latestMessage.isFinal) {
+        console.log("🤖 [Audio Status] AI message completed");
         setAssistantIsResponding(false);
         onAiTypingChange?.(false);
         onTranscriptReceived(latestMessage.text, "AI");
         currentAssistantMessageRef.current = "";
+
+        // Add a delay before sending empty audio data
+        setTimeout(() => {
+          onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+        }, 1000); // 1 second delay to match the volume reset
       } else {
-        // Otherwise, mark that the assistant is responding but don't send the partial message
+        // Otherwise, mark that the assistant is responding
+        console.log("🎯 [Audio Status] AI started responding");
         setAssistantIsResponding(true);
         onAiTypingChange?.(true);
         currentAssistantMessageRef.current = latestMessage.text;
       }
     }
-  }, [conversation, onTranscriptReceived, onAiTypingChange]);
+  }, [conversation, onTranscriptReceived, onAiTypingChange, onAudioResponse]);
+
+  // Log whenever audio playback state changes
+  useEffect(() => {
+    if (isAudioPlaying) {
+      console.log("🔈 [Audio Status] Audio playback started");
+    } else {
+      console.log("🔇 [Audio Status] Audio playback stopped");
+      // Immediately clear visualization when audio stops playing
+      onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+    }
+  }, [isAudioPlaying, onAudioResponse]);
 
   // Update processing state
   useEffect(() => {
@@ -113,10 +138,25 @@ export default function Debater({
 
   // Send audio visualization data with throttling
   useEffect(() => {
-    if (isSessionActive && currentVolume > 0) {
-      sendVisualizationData();
+    let visualizationInterval: NodeJS.Timeout | null = null;
+
+    if (isSessionActive && (currentVolume > 0 || assistantIsResponding)) {
+      visualizationInterval = setInterval(() => {
+        sendVisualizationData();
+      }, 100);
     }
-  }, [currentVolume, isSessionActive, sendVisualizationData]);
+
+    return () => {
+      if (visualizationInterval) {
+        clearInterval(visualizationInterval);
+      }
+    };
+  }, [
+    currentVolume,
+    isSessionActive,
+    sendVisualizationData,
+    assistantIsResponding,
+  ]);
 
   // Handle text submission
   const handleSubmitText = (e: React.FormEvent) => {

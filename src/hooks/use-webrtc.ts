@@ -27,6 +27,7 @@ interface UseWebRTCAudioSessionReturn {
   currentVolume: number;
   conversation: Conversation[];
   sendTextMessage: (text: string) => void;
+  isAudioPlaying: boolean;
 }
 
 /**
@@ -39,6 +40,9 @@ export default function useWebRTCAudioSession(
   // Connection/session states
   const [status, setStatus] = useState("");
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [aiIsTyping, setAiIsTyping] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   // Audio references for local mic
   // Approach A: explicitly typed as HTMLDivElement | null
@@ -184,7 +188,7 @@ export default function useWebRTCAudioSession(
          * User speech started
          */
         case "input_audio_buffer.speech_started": {
-          console.log("🎤 User speech started");
+          console.log("🎤 [Audio Status] User started speaking");
           getOrCreateEphemeralUserId();
           updateEphemeralUserMessage({ status: "speaking" });
           break;
@@ -194,8 +198,7 @@ export default function useWebRTCAudioSession(
          * User speech stopped
          */
         case "input_audio_buffer.speech_stopped": {
-          console.log("🛑 User speech stopped");
-          // optional: you could set "stopped" or just keep "speaking"
+          console.log("🛑 [Audio Status] User stopped speaking");
           updateEphemeralUserMessage({ status: "speaking" });
           break;
         }
@@ -246,21 +249,25 @@ export default function useWebRTCAudioSession(
          */
         case "response.audio_transcript.delta": {
           console.log(
-            "🤖 AI response delta:",
+            "🗣️ [Audio Status] AI is speaking:",
             msg.delta.substring(0, 20) + (msg.delta.length > 20 ? "..." : "")
           );
+          // Mark audio as playing when AI begins speaking
+          setIsAudioPlaying(true);
           const newMessage: Conversation = {
-            id: uuidv4(), // generate a fresh ID for each assistant partial
+            id: uuidv4(),
             role: "assistant",
             text: msg.delta,
             timestamp: new Date().toISOString(),
             isFinal: false,
           };
 
+          // Keep volume active while AI is speaking with higher volume for better visualization
+          setCurrentVolume(0.8); // Increased from 0.5 for better visualization
+
           setConversation((prev) => {
             const lastMsg = prev[prev.length - 1];
             if (lastMsg && lastMsg.role === "assistant" && !lastMsg.isFinal) {
-              // Append to existing assistant partial
               const updated = [...prev];
               updated[updated.length - 1] = {
                 ...lastMsg,
@@ -268,24 +275,51 @@ export default function useWebRTCAudioSession(
               };
               return updated;
             } else {
-              // Start a new assistant partial
               return [...prev, newMessage];
             }
           });
           break;
         }
 
-        /**
-         * Mark the last assistant message as final
-         */
+        case "output_audio_buffer.stopped": {
+          console.log(
+            "🔊 [Audio Status] Output audio buffer stopped - HIDING VISUALIZER"
+          );
+          // Immediately reset volume and mark audio as not playing
+          setCurrentVolume(0);
+          setIsAudioPlaying(false);
+
+          // No delay or conditions - we want to ensure visualization stops
+          break;
+        }
+
         case "response.audio_transcript.done": {
-          console.log("✅ AI response complete");
+          console.log("✅ [Audio Status] AI finished speaking");
+
+          // First mark the message as final
           setConversation((prev) => {
             if (prev.length === 0) return prev;
             const updated = [...prev];
             updated[updated.length - 1].isFinal = true;
             return updated;
           });
+
+          // Don't immediately clear volume monitoring
+          // Let it continue until output_audio_buffer.stopped is received
+
+          // Gradual volume reduction instead of immediate cut
+          const fadeOut = () => {
+            setCurrentVolume((prev) => {
+              const newVolume = prev * 0.8;
+              return newVolume < 0.1 ? 0 : newVolume;
+            });
+          };
+
+          const fadeInterval = setInterval(fadeOut, 100);
+          setTimeout(() => {
+            clearInterval(fadeInterval);
+            setCurrentVolume(0);
+          }, 1000);
           break;
         }
 
@@ -421,6 +455,17 @@ export default function useWebRTCAudioSession(
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
 
+      // Add event listeners to detect when audio stops
+      audioEl.addEventListener("ended", () => {
+        console.log("🔊 Audio playback ended");
+        setCurrentVolume(0);
+      });
+
+      audioEl.addEventListener("pause", () => {
+        console.log("🔊 Audio playback paused");
+        setCurrentVolume(0);
+      });
+
       // Inbound track => assistant's TTS
       pc.ontrack = (event) => {
         console.log("🔊 Received audio track from server");
@@ -441,8 +486,16 @@ export default function useWebRTCAudioSession(
 
         volumeIntervalRef.current = window.setInterval(() => {
           const volume = getVolume();
-          // Only update if the volume change is significant (reduces needless state updates)
-          if (Math.abs(volume - currentVolume) > 0.05) {
+
+          // Check if audio has stopped or is silent
+          if (audioEl && audioEl.paused) {
+            // If audio element is paused, immediately set volume to 0
+            setCurrentVolume(0);
+          } else if (volume < 0.01) {
+            // If volume is very low (effectively silent), count as zero
+            setCurrentVolume(0);
+          } else if (Math.abs(volume - currentVolume) > 0.05) {
+            // Only update if the volume change is significant (reduces needless state updates)
             setCurrentVolume(volume);
           }
         }, 100);
@@ -636,5 +689,6 @@ export default function useWebRTCAudioSession(
     currentVolume,
     conversation,
     sendTextMessage,
+    isAudioPlaying,
   };
 }
