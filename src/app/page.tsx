@@ -343,7 +343,7 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            Human vs AI: The Great Debate
+            Meet Product Patel
           </motion.h1>
           <motion.p
             className="text-center text-gray-400 mt-2 max-w-2xl mx-auto"
@@ -351,8 +351,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            Witness the ultimate intellectual showdown between human
-            intelligence and artificial intelligence
+            The AI Product Manager at Build Fast with AI
           </motion.p>
         </header>
 
