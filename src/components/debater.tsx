@@ -13,6 +13,7 @@ interface DebaterProps {
   messages?: Message[];
   onProcessingChange?: (isProcessing: boolean) => void;
   onAiTypingChange?: (isTyping: boolean) => void;
+  onAudioPlayingChange?: (isPlaying: boolean) => void;
 }
 
 export default function Debater({
@@ -21,6 +22,7 @@ export default function Debater({
   messages = [],
   onProcessingChange,
   onAiTypingChange,
+  onAudioPlayingChange,
 }: DebaterProps) {
   const [voice, setVoice] = useState("alloy");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -92,12 +94,16 @@ export default function Debater({
   useEffect(() => {
     if (isAudioPlaying) {
       console.log("🔈 [Audio Status] Audio playback started");
+      // Notify parent component about audio playing state
+      onAudioPlayingChange?.(true);
     } else {
       console.log("🔇 [Audio Status] Audio playback stopped");
       // Immediately clear visualization when audio stops playing
       onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+      // Notify parent component about audio playing state
+      onAudioPlayingChange?.(false);
     }
-  }, [isAudioPlaying, onAudioResponse]);
+  }, [isAudioPlaying, onAudioResponse, onAudioPlayingChange]);
 
   // Update processing state
   useEffect(() => {

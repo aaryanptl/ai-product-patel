@@ -294,7 +294,7 @@ export default function useWebRTCAudioSession(
         }
 
         case "response.audio_transcript.done": {
-          console.log("✅ [Audio Status] AI finished speaking");
+          console.log("✅ [Audio Status] AI finished speaking transcript");
 
           // First mark the message as final
           setConversation((prev) => {
@@ -304,21 +304,26 @@ export default function useWebRTCAudioSession(
             return updated;
           });
 
-          // Don't immediately clear volume monitoring
-          // Let it continue until output_audio_buffer.stopped is received
+          // Don't set isAudioPlaying to false here!
+          // The audio buffer may still be playing even after transcription is done
+          // Wait for output_audio_buffer.stopped event to actually stop visualization
+          console.log(
+            "🔈 [Audio Status] Transcript done but keeping animation until audio buffer stops"
+          );
 
-          // Gradual volume reduction instead of immediate cut
+          // Gradually reduce volume but don't stop completely
           const fadeOut = () => {
             setCurrentVolume((prev) => {
               const newVolume = prev * 0.8;
-              return newVolume < 0.1 ? 0 : newVolume;
+              // Don't reduce below 0.2 to keep some visual activity
+              return newVolume < 0.2 ? 0.2 : newVolume;
             });
           };
 
           const fadeInterval = setInterval(fadeOut, 100);
           setTimeout(() => {
             clearInterval(fadeInterval);
-            setCurrentVolume(0);
+            // Don't force volume to 0 here - let output_audio_buffer.stopped handle that
           }, 1000);
           break;
         }

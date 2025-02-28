@@ -35,6 +35,7 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [aiIsTyping, setAiIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const lastAudioUpdateTimeRef = useRef(0);
   const [currentDebateId, setCurrentDebateId] = useState<string | null>(null);
 
@@ -332,6 +333,16 @@ export default function Home() {
     }
   }, []);
 
+  // Add handler for audio playing state changes
+  const handleAudioPlayingChange = useCallback((isPlaying: boolean) => {
+    console.log(
+      `🔊 [Page] Audio playing state changed to: ${
+        isPlaying ? "PLAYING" : "STOPPED"
+      }`
+    );
+    setIsAudioPlaying(isPlaying);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#0a1017] text-white">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -376,6 +387,7 @@ export default function Home() {
                       audioData={audioData}
                       isProcessing={isProcessing}
                       isGenerating={aiIsTyping}
+                      audioPaused={!isAudioPlaying}
                     />
                   </div>
                 </div>
@@ -428,6 +440,7 @@ export default function Home() {
                   messages={messages}
                   onProcessingChange={setIsProcessing}
                   onAiTypingChange={handleAiTypingChange}
+                  onAudioPlayingChange={handleAudioPlayingChange}
                 />
               </div>
             </motion.div>
