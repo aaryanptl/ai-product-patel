@@ -129,11 +129,6 @@ export default function Debater({
 
   return (
     <div className="space-y-4">
-      <div className="w-full max-w-2xl mx-auto">
-        <div ref={audioIndicatorRef} className="audio-indicator">
-          <AudioVisualizer stream={null} />
-        </div>
-      </div>
       <div className="flex justify-center items-center space-x-4">
         <Button
           onClick={handleStartStopClick}
@@ -141,77 +136,37 @@ export default function Debater({
           variant="ghost"
           size="lg"
           className={`
-            relative w-16 h-16 rounded-full p-0 
-            transition-all duration-200 ease-in-out
-            hover:bg-slate-100 dark:hover:bg-slate-800
+            debater-mic-button
+            relative size-20 rounded-full p-0 
+            transition-all duration-300 ease-in-out
+            shadow-md hover:shadow-lg
             ${
               isSessionActive
-                ? "bg-red-500/10 border-2 border-red-500"
-                : "bg-green-500/10 border-2 border-green-500"
+                ? "bg-red-500/10 border-2 border-red-500 hover:bg-red-500/20"
+                : "bg-green-500/10 border-2 border-green-500 hover:bg-green-500/20"
             }
             ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}
           `}
         >
           <div
             className={`
-            absolute inset-0 rounded-full
-            ${isSessionActive ? "animate-ping bg-red-500/30" : ""}
+            absolute inset-0 rounded-full opacity-60
+            ${isSessionActive ? "animate-pulse bg-red-500/20" : ""}
           `}
           />
-          {isSessionActive ? (
-            <Square className="w-5 h-5 text-red-500 relative z-10" />
-          ) : (
-            <Mic
-              className={`
-              w-5 h-5 relative z-10
-              ${isProcessing ? "text-slate-400" : "text-green-500"}
-            `}
-            />
-          )}
-        </Button>
-      </div>
-
-      <div className="text-center text-sm font-medium">
-        {isSessionActive ? (
-          <p className="text-red-500">Session Active - Click square to end</p>
-        ) : (
-          <p className="text-green-500">Click mic to start conversation</p>
-        )}
-      </div>
-
-      {isSessionActive && (
-        <div className="flex justify-center mt-4">
-          <form onSubmit={handleSubmitText} className="w-full max-w-md">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                className="w-full p-2 rounded-md bg-black/20 border border-gray-700 text-white"
-                placeholder={
-                  assistantIsResponding
-                    ? "AI is responding..."
-                    : "Type a message to send..."
-                }
-                disabled={assistantIsResponding}
+          <div className="relative z-10 flex items-center justify-center">
+            {isSessionActive ? (
+              <Square className="w-5 h-5 text-red-500 transition-transform duration-200 transform" />
+            ) : (
+              <Mic
+                className={`
+                w-5 h-5 transition-transform duration-200 transform hover:scale-110
+                ${isProcessing ? "text-slate-400" : "text-green-500"}
+              `}
               />
-              <Button
-                type="submit"
-                disabled={!userInput.trim() || assistantIsResponding}
-              >
-                Send
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
-      <div className="text-center text-sm text-gray-500">
-        {status && <p>{status}</p>}
-        {assistantIsResponding && (
-          <p className="text-green-500 animate-pulse mt-1">
-            AI is responding...
-          </p>
-        )}
+            )}
+          </div>
+        </Button>
       </div>
     </div>
   );

@@ -52,13 +52,13 @@ export default function AudioVisualizer({
     const baseRadius = Math.min(width, height) * 0.25;
 
     // Clear canvas
-    ctx.fillStyle = "#0c0c0e";
+    ctx.fillStyle = "#111827";
     ctx.fillRect(0, 0, width, height);
 
     // Draw base circle (body)
     ctx.beginPath();
     ctx.arc(center.x, center.y, baseRadius, 0, Math.PI * 2);
-    ctx.fillStyle = "#0c0c0e";
+    ctx.fillStyle = "#111827";
     ctx.fill();
     ctx.strokeStyle = "#14b8a6";
     ctx.lineWidth = 2;
@@ -152,7 +152,7 @@ export default function AudioVisualizer({
       const time = elapsed * 0.001; // Convert to seconds
 
       // Clear canvas
-      ctx.fillStyle = "#0c0c0e";
+      ctx.fillStyle = "#111827";
       ctx.fillRect(0, 0, width, height);
 
       // Calculate breathing effect
@@ -164,7 +164,7 @@ export default function AudioVisualizer({
       // Draw base circle (body)
       ctx.beginPath();
       ctx.arc(center.x, center.y, currentRadius, 0, Math.PI * 2);
-      ctx.fillStyle = "#0c0c0e";
+      ctx.fillStyle = "#111827";
       ctx.fill();
       ctx.strokeStyle = isGenerating ? "#6366f1" : "#14b8a6";
       ctx.lineWidth = 2;
