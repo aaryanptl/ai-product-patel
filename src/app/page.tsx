@@ -19,6 +19,7 @@ import AudiencePoll from "@/components/audience-poll";
 import AudioVisualizer from "@/components/audio-visualizer";
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/types/supabase";
+import Image from "next/image";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -334,20 +335,41 @@ export default function Home() {
   }, []);
 
   // Add handler for audio playing state changes
-  const handleAudioPlayingChange = useCallback((isPlaying: boolean) => {
-    console.log(
-      `🔊 [Page] Audio playing state changed to: ${
-        isPlaying ? "PLAYING" : "STOPPED"
-      }`
-    );
-    setIsAudioPlaying(isPlaying);
-  }, []);
+  const handleAudioPlayingChange = useCallback(
+    (isPlaying: boolean) => {
+      console.log(
+        `🔊 [Page] Audio playing state changed to: ${
+          isPlaying ? "PLAYING" : "STOPPED"
+        }`
+      );
+      setIsAudioPlaying(isPlaying);
+
+      // When audio stops playing, ensure we clean up
+      if (!isPlaying && !isListening) {
+        console.log(
+          "🔄 [Page] Audio stopped and not listening, resetting audio data"
+        );
+        // Reset audio data with a small delay to ensure smooth transition
+        setTimeout(() => {
+          setAudioData(undefined);
+          setAudioLevel(0);
+        }, 300);
+      }
+    },
+    [isListening]
+  );
 
   return (
-    <div className="min-h-screen bg-[#0a1017] text-white">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <header className="mb-8">
+    <div className="h-screen bg-[#0a1017] pb-4">
+      <header className="h-32 items-center flex justify-center max-w-7xl mx-auto relative">
+        <Image
+          src={"/logo.svg"}
+          alt="BuildFastwithAI"
+          width={70}
+          height={70}
+          className="absolute -left-10"
+        />
+        <div className="">
           <motion.h1
             className="text-4xl md:text-5xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-500"
             initial={{ opacity: 0, y: -20 }}
@@ -364,25 +386,30 @@ export default function Home() {
           >
             The AI Product Manager at Build Fast with AI
           </motion.p>
-        </header>
+        </div>
+        <div className=""></div>
+      </header>
+      <div className="container mx-auto px-4 max-w-7xl h-[calc(100%-8rem)]">
+        {/* Header */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-7 gap-6 h-full">
           {/* Main Content Area */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-5">
             <motion.div
-              className="relative bg-[#111827] rounded-2xl border border-gray-800 shadow-xl overflow-hidden h-[600px] flex flex-col items-center justify-center"
+              className="relative bg-[#111827] rounded-2xl border border-gray-800 shadow-xl overflow-hidden h-full flex flex-col items-center justify-center"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
             >
               {/* Audio Visualizer Container */}
-              <div className="absolute inset-0 flex flex-col items-center justify-between py-10">
+              <div className="absolute inset-0 flex flex-col items-center justify-between">
                 {/* Audio Visualization in the Middle */}
                 <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
                   <div className="w-full h-full pointer-events-none flex items-center justify-center">
                     <AudioVisualizer
                       isActive={
-                        !!audioData && isPlaying && (isListening || aiIsTyping)
+                        !!audioData &&
+                        (isListening || aiIsTyping || isAudioPlaying)
                       }
                       audioData={audioData}
                       isProcessing={isProcessing}
@@ -447,10 +474,10 @@ export default function Home() {
           </div>
 
           {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
+          <div className="lg:col-span-2 space-y-6 flex flex-col">
             {/* Analysis Panel */}
             <motion.div
-              className="bg-gray-900 rounded-xl border border-gray-800 shadow-lg overflow-hidden"
+              className="bg-gray-900 rounded-xl border border-gray-800 shadow-lg overflow-hidden flex-1"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
@@ -465,21 +492,27 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="p-4 border border-gray-700/50">
-                <div className="flex items-start gap-2 mb-2">
+              <div className="p-4">
+                {/* <div className="flex items-start gap-2 mb-2">
                   <Sparkles className="w-4 h-4 text-amber-400 mt-0.5" />
-                </div>
-                <p className="text-sm text-gray-300">
+                </div> */}
+                {/* <p className="text-sm text-gray-300">
                   {transcript.length > 0
                     ? "The AI has stated it does not have a name and prefers to be seen as a helpful AI companion. The current topic is the AI's lack of a personal name."
                     : "Start a conversation to see a summary here."}
+                </p> */}
+                <p className="text-sm text-gray-400">
+                  Hello! I am Product Patel, AI Product Manager at Build Fast
+                  with AI. I’m here at IIM Bangalore to demonstrate a simple
+                  truth: AI product management is not just the future, it is the
+                  present, because it is *better* than human product management.
                 </p>
               </div>
             </motion.div>
 
             {/* Audience Poll */}
             <motion.div
-              className="bg-gray-900 rounded-xl border border-gray-800 shadow-lg overflow-hidden"
+              className=""
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}

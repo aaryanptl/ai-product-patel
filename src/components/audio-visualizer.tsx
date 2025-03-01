@@ -43,14 +43,46 @@ export default function AudioVisualizer({
       if (audioPaused === true && prevAudioPausedRef.current === false) {
         console.log("📢 [Visualizer] EXPLICIT BUFFER STOP SIGNAL RECEIVED");
         setBufferExplicitlyStopped(true);
+
+        // When audio is paused and we're not generating, we should stop the wave animation
+        // after a short delay to ensure any remaining audio finishes playing
+        if (!isGenerating) {
+          console.log(
+            "🔄 [Visualizer] Audio paused and not generating, preparing to stop wave animation"
+          );
+          if (animationStopTimeoutRef.current) {
+            clearTimeout(animationStopTimeoutRef.current);
+          }
+
+          animationStopTimeoutRef.current = setTimeout(() => {
+            console.log(
+              "⏱️ [Visualizer] Animation stop delay complete, stopping wave animation"
+            );
+            setWaveActive(false);
+
+            // Explicitly draw idle state with teal color
+            if (canvasRef.current) {
+              cancelAnimationFrame(animationRef.current);
+              animationRef.current = 0;
+              drawIdle();
+              console.log("🟢 [Visualizer] Transitioned to idle teal face");
+            }
+          }, 500); // Short delay after pause signal
+        }
       } else if (audioPaused === false) {
         // Reset the flag when audio starts playing again
         setBufferExplicitlyStopped(false);
+
+        // If we have a pending animation stop, cancel it as audio is playing again
+        if (animationStopTimeoutRef.current) {
+          clearTimeout(animationStopTimeoutRef.current);
+          animationStopTimeoutRef.current = null;
+        }
       }
 
       prevAudioPausedRef.current = audioPaused;
     }
-  }, [audioPaused]);
+  }, [audioPaused, isGenerating]);
 
   // Handle transitions when AI speaking state changes
   useEffect(() => {
@@ -65,16 +97,81 @@ export default function AudioVisualizer({
       }
     }
 
-    // If AI just stopped speaking but we still need to wait for audio buffer
+    // If AI just stopped speaking, prepare to transition back
     else if (!isGenerating && prevIsGeneratingRef.current) {
       console.log(
-        "🔄 AI stopped generating, but waiting for audio buffer to complete"
+        "🔄 AI stopped generating, waiting for audio buffer to complete"
       );
-      // Don't stop the animation yet - we'll wait for audioPaused to be true
+      // Don't immediately stop the animation - wait for audioPaused to signal buffer is done
     }
 
     prevIsGeneratingRef.current = isGenerating;
   }, [isGenerating]);
+
+  // Simplified monitor for explicit buffer stop signal
+  useEffect(() => {
+    // Only consider stopping animation when buffer has explicitly stopped and we're not generating
+    if (bufferExplicitlyStopped && !isGenerating && waveActive) {
+      console.log(
+        "🛑 [Visualizer] Buffer explicitly stopped and not generating, preparing to stop animation"
+      );
+
+      // Clear any existing timeout to avoid conflicts
+      if (animationStopTimeoutRef.current) {
+        clearTimeout(animationStopTimeoutRef.current);
+      }
+
+      // Set shorter delay for stopping the animation
+      animationStopTimeoutRef.current = setTimeout(() => {
+        console.log(
+          "⏱️ Animation stop delay complete, stopping wave animation"
+        );
+        setWaveActive(false);
+
+        // Ensure we cancel any existing animation frame
+        if (canvasRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = 0;
+          drawIdle();
+          console.log("🟢 Transitioned to idle teal face");
+        }
+
+        animationStopTimeoutRef.current = null;
+      }, 800); // Shorter delay (800ms)
+    }
+  }, [bufferExplicitlyStopped, isGenerating, waveActive]);
+
+  // Ensure animation stops when audio is paused, even without buffer stop signal
+  useEffect(() => {
+    if (audioPaused && !isGenerating && waveActive) {
+      console.log(
+        "🔈 [Visualizer] Audio paused and not generating, preparing to stop wave animation"
+      );
+
+      // Clear any existing timeout to avoid conflicts
+      if (animationStopTimeoutRef.current) {
+        clearTimeout(animationStopTimeoutRef.current);
+      }
+
+      // Set timeout to stop animation after a short delay
+      animationStopTimeoutRef.current = setTimeout(() => {
+        console.log("⏱️ [Visualizer] Animation stop timeout triggered");
+        setWaveActive(false);
+
+        // Cancel animation and draw idle state
+        if (canvasRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = 0;
+          drawIdle();
+          console.log(
+            "🟢 [Visualizer] Transitioned to idle teal face due to audio pause"
+          );
+        }
+
+        animationStopTimeoutRef.current = null;
+      }, 500); // Short delay
+    }
+  }, [audioPaused, isGenerating, waveActive]);
 
   // Force continuous animation while audio is playing
   useEffect(() => {
@@ -115,70 +212,6 @@ export default function AudioVisualizer({
       drawAiSpeaking();
     }
   }, [audioPaused, isGenerating, waveActive, bufferExplicitlyStopped]);
-
-  // Monitor explicit buffer stop signal
-  useEffect(() => {
-    // ONLY consider stopping animation when we've received the explicit buffer stopped signal
-    if (waveActive && bufferExplicitlyStopped && !isGenerating) {
-      console.log(
-        "🛑 [Visualizer] Explicit buffer stop received, delaying animation stop..."
-      );
-
-      // Clear any existing timeout to avoid conflicts
-      if (animationStopTimeoutRef.current) {
-        clearTimeout(animationStopTimeoutRef.current);
-      }
-
-      // Add a much longer delay before stopping the animation to ensure audio buffer is completely done
-      // This gives plenty of time for any remaining audio to finish playing
-      animationStopTimeoutRef.current = setTimeout(() => {
-        // Double-check we're still not generating before stopping
-        if (isGenerating) {
-          console.log(
-            "🔄 Not stopping animation because AI is generating again"
-          );
-          if (animationStopTimeoutRef.current) {
-            clearTimeout(animationStopTimeoutRef.current);
-            animationStopTimeoutRef.current = null;
-          }
-          return;
-        }
-
-        console.log(
-          "⏱️ Animation stop delay complete, now stopping wave animation and transitioning to green idle face"
-        );
-        // First set wave as inactive
-        setWaveActive(false);
-
-        // Then ensure we cancel any existing animation frame
-        if (canvasRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = 0;
-
-          // Finally, explicitly draw the idle state with green face
-          drawIdle();
-          console.log("🟢 Transitioned to idle green face");
-        }
-
-        animationStopTimeoutRef.current = null;
-      }, 2000); // Even longer delay (2 seconds) after explicit stop signal
-    } else if (!bufferExplicitlyStopped || isGenerating) {
-      // If the buffer is not explicitly stopped or we're generating, cancel any pending animation stop
-      if (animationStopTimeoutRef.current) {
-        console.log(
-          "🔄 Cancelling pending animation stop - buffer still active or AI generating"
-        );
-        clearTimeout(animationStopTimeoutRef.current);
-        animationStopTimeoutRef.current = null;
-      }
-
-      // Ensure animation is running if it should be
-      if (waveActive && animationRef.current === 0 && canvasRef.current) {
-        console.log("🔄 Ensuring animation is running");
-        drawAiSpeaking();
-      }
-    }
-  }, [bufferExplicitlyStopped, waveActive, isGenerating]);
 
   useEffect(() => {
     // Start the idle animation when component mounts if not in speaking mode
@@ -495,8 +528,6 @@ export default function AudioVisualizer({
     const center = { x: width / 2, y: height / 2 };
     const baseRadius = Math.min(width, height) * 0.25;
     const startTime = Date.now();
-    // Animation fade-in effect
-    let fadeInProgress = 0;
 
     // Clear any existing animation reference
     if (animationRef.current) {
@@ -514,9 +545,6 @@ export default function AudioVisualizer({
       const elapsed = Date.now() - startTime;
       const time = elapsed * 0.001; // Convert to seconds
 
-      // Calculate fade-in effect (0 to 1 over 500ms)
-      fadeInProgress = Math.min(1, elapsed / 500);
-
       // Clear canvas with dark background
       ctx.fillStyle = "#111827";
       ctx.fillRect(0, 0, width, height);
@@ -531,18 +559,15 @@ export default function AudioVisualizer({
       ctx.fillStyle = "#111827";
       ctx.fill();
 
-      // Transition from purple to green using fade effect
-      const r = Math.round(99 + (20 - 99) * fadeInProgress);
-      const g = Math.round(102 + (184 - 102) * fadeInProgress);
-      const b = Math.round(241 + (166 - 241) * fadeInProgress);
-      ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
+      // Always use teal color
+      ctx.strokeStyle = "#14b8a6";
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Draw eyes - transitioning from purple to green squares
+      // Draw eyes - always use teal squares
       const eyeSize = 8;
       const eyeSpacing = 30;
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.fillStyle = "#14b8a6";
 
       if (!isBlinking) {
         // Normal square eyes
@@ -561,7 +586,7 @@ export default function AudioVisualizer({
       } else {
         // Closed eyes (horizontal lines)
         ctx.lineWidth = 2;
-        ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.strokeStyle = "#14b8a6";
         ctx.beginPath();
         ctx.moveTo(center.x - eyeSpacing - eyeSize / 2, center.y);
         ctx.lineTo(center.x - eyeSpacing + eyeSize / 2, center.y);
@@ -611,14 +636,10 @@ export default function AudioVisualizer({
 
       ctx.closePath();
 
-      // Add glow effect with color transition
-      // Transition shadow from purple to teal green
-      const shadowR = Math.round(99 + (20 - 99) * fadeInProgress);
-      const shadowG = Math.round(102 + (184 - 102) * fadeInProgress);
-      const shadowB = Math.round(241 + (166 - 241) * fadeInProgress);
-      ctx.shadowColor = `rgba(${shadowR}, ${shadowG}, ${shadowB}, 0.5)`;
+      // Add glow effect with teal color
+      ctx.shadowColor = "rgba(20, 184, 166, 0.5)";
       ctx.shadowBlur = 15;
-      ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.strokeStyle = "#14b8a6";
       ctx.lineWidth = 2;
       ctx.stroke();
 

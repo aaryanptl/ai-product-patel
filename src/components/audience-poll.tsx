@@ -239,7 +239,7 @@ export default function AudiencePoll({ debateId = "current" }) {
   };
 
   return (
-    <Card className="bg-zinc-900/50 border-zinc-800 backdrop-blur-xl p-4 rounded-3xl">
+    <Card className="bg-[#111827] border-slate-800 backdrop-blur-xl p-4 rounded-3xl">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg text-white font-semibold">Audience Poll</h2>
         <Button
@@ -322,15 +322,6 @@ export default function AudiencePoll({ debateId = "current" }) {
           <div className="text-center text-xs text-gray-500 mt-1">
             Total votes: {totalVotes}
           </div>
-
-          <Button
-            variant="ghost"
-            className="w-full text-gray-400 hover:text-white mt-2 text-sm flex items-center justify-center gap-1"
-            onClick={() => window.open(shareUrl, "_blank")}
-          >
-            <ExternalLink className="size-3" />
-            Open Voting Page
-          </Button>
         </div>
       )}
     </Card>

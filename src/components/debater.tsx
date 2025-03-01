@@ -76,10 +76,13 @@ export default function Debater({
         onTranscriptReceived(latestMessage.text, "AI");
         currentAssistantMessageRef.current = "";
 
-        // Add a delay before sending empty audio data
+        // Add a delay before sending empty audio data to ensure smooth transition
         setTimeout(() => {
+          console.log(
+            "🔇 [Audio Status] Sending empty audio data after AI message complete"
+          );
           onAudioResponse(new Blob([], { type: "application/octet-stream" }));
-        }, 1000); // 1 second delay to match the volume reset
+        }, 1000);
       } else {
         // Otherwise, mark that the assistant is responding
         console.log("🎯 [Audio Status] AI started responding");
@@ -98,10 +101,17 @@ export default function Debater({
       onAudioPlayingChange?.(true);
     } else {
       console.log("🔇 [Audio Status] Audio playback stopped");
-      // Immediately clear visualization when audio stops playing
-      onAudioResponse(new Blob([], { type: "application/octet-stream" }));
-      // Notify parent component about audio playing state
+      // Explicitly notify parent about audio stopping
       onAudioPlayingChange?.(false);
+
+      // Immediately clear visualization when audio stops playing
+      // Adding a small delay to ensure all transitions happen properly
+      setTimeout(() => {
+        console.log(
+          "🧹 [Audio Status] Clearing visualization after audio stop"
+        );
+        onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+      }, 200);
     }
   }, [isAudioPlaying, onAudioResponse, onAudioPlayingChange]);
 
