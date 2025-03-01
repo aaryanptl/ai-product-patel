@@ -35,7 +35,8 @@ interface UseWebRTCAudioSessionReturn {
  */
 export default function useWebRTCAudioSession(
   voice: string,
-  tools?: Tool[]
+  tools?: Tool[],
+  onStatusChange?: (status: string) => void
 ): UseWebRTCAudioSessionReturn {
   // Connection/session states
   const [status, setStatus] = useState("");
@@ -43,6 +44,13 @@ export default function useWebRTCAudioSession(
   const [isProcessing, setIsProcessing] = useState(false);
   const [aiIsTyping, setAiIsTyping] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+
+  // Update external status handler when status changes
+  useEffect(() => {
+    if (onStatusChange) {
+      onStatusChange(status);
+    }
+  }, [status, onStatusChange]);
 
   // Audio references for local mic
   // Approach A: explicitly typed as HTMLDivElement | null
@@ -252,8 +260,7 @@ export default function useWebRTCAudioSession(
             "🗣️ [Audio Status] AI is speaking:",
             msg.delta.substring(0, 20) + (msg.delta.length > 20 ? "..." : "")
           );
-          // Mark audio as playing when AI begins speaking
-          setIsAudioPlaying(true);
+
           const newMessage: Conversation = {
             id: uuidv4(),
             role: "assistant",
@@ -261,9 +268,6 @@ export default function useWebRTCAudioSession(
             timestamp: new Date().toISOString(),
             isFinal: false,
           };
-
-          // Keep volume active while AI is speaking with higher volume for better visualization
-          setCurrentVolume(0.8); // Increased from 0.5 for better visualization
 
           setConversation((prev) => {
             const lastMsg = prev[prev.length - 1];
@@ -281,6 +285,20 @@ export default function useWebRTCAudioSession(
           break;
         }
 
+        /**
+         * Audio playback actually started
+         */
+        case "output_audio_buffer.started": {
+          console.log(
+            "🔊 [Audio Status] Output audio buffer STARTED - SHOWING VISUALIZER"
+          );
+          // Set audio as playing when we actually have audio output
+          setIsAudioPlaying(true);
+          // Set initial volume level for visualization
+          setCurrentVolume(0.8);
+          break;
+        }
+
         case "output_audio_buffer.stopped": {
           console.log(
             "🔊 [Audio Status] Output audio buffer stopped - HIDING VISUALIZER"
@@ -288,8 +306,6 @@ export default function useWebRTCAudioSession(
           // Immediately reset volume and mark audio as not playing
           setCurrentVolume(0);
           setIsAudioPlaying(false);
-
-          // No delay or conditions - we want to ensure visualization stops
           break;
         }
 
@@ -310,21 +326,6 @@ export default function useWebRTCAudioSession(
           console.log(
             "🔈 [Audio Status] Transcript done but keeping animation until audio buffer stops"
           );
-
-          // Gradually reduce volume but don't stop completely
-          const fadeOut = () => {
-            setCurrentVolume((prev) => {
-              const newVolume = prev * 0.8;
-              // Don't reduce below 0.2 to keep some visual activity
-              return newVolume < 0.2 ? 0.2 : newVolume;
-            });
-          };
-
-          const fadeInterval = setInterval(fadeOut, 100);
-          setTimeout(() => {
-            clearInterval(fadeInterval);
-            // Don't force volume to 0 here - let output_audio_buffer.stopped handle that
-          }, 1000);
           break;
         }
 
@@ -460,17 +461,6 @@ export default function useWebRTCAudioSession(
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
 
-      // Add event listeners to detect when audio stops
-      audioEl.addEventListener("ended", () => {
-        console.log("🔊 Audio playback ended");
-        setCurrentVolume(0);
-      });
-
-      audioEl.addEventListener("pause", () => {
-        console.log("🔊 Audio playback paused");
-        setCurrentVolume(0);
-      });
-
       // Inbound track => assistant's TTS
       pc.ontrack = (event) => {
         console.log("🔊 Received audio track from server");
@@ -484,7 +474,31 @@ export default function useWebRTCAudioSession(
         src.connect(inboundAnalyzer);
         analyserRef.current = inboundAnalyzer;
 
-        // Start volume monitoring with throttling (100ms intervals)
+        // Add event listeners to detect when audio starts playing
+        audioEl.addEventListener("playing", () => {
+          console.log("🔊 Audio playback started");
+          setIsAudioPlaying(true);
+          setCurrentVolume(0.8); // Set initial volume
+        });
+
+        // Add event listeners to detect when audio stops
+        audioEl.addEventListener("ended", () => {
+          console.log("🔊 Audio playback ended");
+          setCurrentVolume(0);
+          setIsAudioPlaying(false);
+        });
+
+        audioEl.addEventListener("pause", () => {
+          console.log("🔊 Audio playback paused");
+          setCurrentVolume(0);
+          setIsAudioPlaying(false);
+        });
+
+        // Add variables to track sustained silence
+        let silenceCounter = 0;
+        const MAX_SILENCE_COUNT = 5; // 5 intervals of silence before considering audio ended
+
+        // Clear previous interval if it exists
         if (volumeIntervalRef.current) {
           clearInterval(volumeIntervalRef.current);
         }
@@ -492,16 +506,42 @@ export default function useWebRTCAudioSession(
         volumeIntervalRef.current = window.setInterval(() => {
           const volume = getVolume();
 
-          // Check if audio has stopped or is silent
-          if (audioEl && audioEl.paused) {
-            // If audio element is paused, immediately set volume to 0
-            setCurrentVolume(0);
-          } else if (volume < 0.01) {
-            // If volume is very low (effectively silent), count as zero
-            setCurrentVolume(0);
-          } else if (Math.abs(volume - currentVolume) > 0.05) {
-            // Only update if the volume change is significant (reduces needless state updates)
-            setCurrentVolume(volume);
+          // Only update if audio element exists
+          if (!audioEl) return;
+
+          if (audioEl.paused) {
+            // If audio element is explicitly paused, immediately set volume to 0
+            if (currentVolume > 0) {
+              console.log("🔇 Audio element is paused, clearing volume");
+              setCurrentVolume(0);
+              setIsAudioPlaying(false);
+              silenceCounter = 0;
+            }
+          } else {
+            // Audio element is not paused, but check if it's actually playing audio
+            if (volume < 0.008) {
+              // Very low volume might indicate silent passage or end of audio
+              silenceCounter++;
+
+              if (silenceCounter >= MAX_SILENCE_COUNT) {
+                // Sustained silence detected, audio might have ended
+                console.log(
+                  "🔇 Sustained silence detected, considering audio ended"
+                );
+                setCurrentVolume(0);
+                setIsAudioPlaying(false);
+              } else {
+                // Reduce volume but keep some minimal level during short silences
+                setCurrentVolume((prev) => Math.max(0.1, prev * 0.9));
+              }
+            } else {
+              // Normal audio playing with audible volume
+              silenceCounter = 0; // Reset silence counter when audio is detected
+              const scaledVolume = Math.max(volume * 2, 0.2); // Amplify for better visualization
+              setCurrentVolume(scaledVolume);
+              // Ensure we mark audio as playing when we detect actual audio
+              setIsAudioPlaying(true);
+            }
           }
         }, 100);
       };
@@ -622,6 +662,7 @@ export default function useWebRTCAudioSession(
       stopSession();
     } else {
       console.log("▶️ Starting new session...");
+      setStatus("Initializing session...");
       startSession();
     }
   }

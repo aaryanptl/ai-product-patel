@@ -1,25 +1,25 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
 import { Message } from "ai";
 import {
   Mic,
   RefreshCw,
-  BarChart2,
-  FileText,
-  Maximize2,
-  ChevronRight,
-  Sparkles,
+  BarChart3,
+  Share2,
   Square,
+  Brain,
+  Wand2,
+  Activity,
+  ExternalLink,
+  Zap,
+  Loader2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Debater from "@/components/debater";
-import LiveTranscript from "@/components/live-transcript";
 import AudiencePoll from "@/components/audience-poll";
-import AudioVisualizer from "@/components/audio-visualizer";
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/types/supabase";
-import Image from "next/image";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -32,29 +32,53 @@ export default function Home() {
   >([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [audioData, setAudioData] = useState<Uint8Array | undefined>();
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [aiIsTyping, setAiIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const lastAudioUpdateTimeRef = useRef(0);
   const [currentDebateId, setCurrentDebateId] = useState<string | null>(null);
-
-  // For the new UI
-  const [activeTab, setActiveTab] = useState("summary");
+  const [isDebateLoading, setIsDebateLoading] = useState(true);
   const [audioLevel, setAudioLevel] = useState(0);
-
-  // Add state for storing recent audio data
   const [recentUserAudio, setRecentUserAudio] = useState<string>("");
   const [recentAIAudio, setRecentAIAudio] = useState<string>("");
+  const [brainActivity, setBrainActivity] = useState(Array(12).fill(0));
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<string>("");
 
-  // Track last speaker for audio collection
+  // References for audio handling
+  const lastAudioUpdateTimeRef = useRef(0);
   const lastSpeakerRef = useRef<"AI" | "Human" | null>(null);
   const lastTranscriptTimestampRef = useRef(0);
-
-  // Buffer for collecting audio chunks
   const userAudioBufferRef = useRef<Blob[]>([]);
   const aiAudioBufferRef = useRef<Blob[]>([]);
+
+  // Effect to animate audio bars when audio is playing
+  useEffect(() => {
+    let animationInterval: NodeJS.Timeout | null = null;
+
+    if (isAudioPlaying) {
+      // Update the visualizer every 100ms to create animation
+      animationInterval = setInterval(() => {
+        // Force re-render to get new random heights
+        setAudioLevel((prev) => (prev > 0.5 ? 0.3 : 0.7));
+      }, 100);
+    }
+
+    return () => {
+      if (animationInterval) {
+        clearInterval(animationInterval);
+      }
+    };
+  }, [isAudioPlaying]);
+
+  // Simulate brain activity for the visualization
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBrainActivity((prev) => prev.map(() => Math.random() * 100));
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Create or get active debate
   useEffect(() => {
@@ -72,6 +96,7 @@ export default function Home() {
         if (!error && existingDebate) {
           console.log("Found existing debate:", existingDebate);
           setCurrentDebateId(existingDebate.id);
+          setIsDebateLoading(false);
           return existingDebate.id;
         } else {
           console.log("No active debate found, creating new one");
@@ -94,10 +119,12 @@ export default function Home() {
 
           console.log("Created new debate:", newDebate);
           setCurrentDebateId(newDebate.id);
+          setIsDebateLoading(false);
           return newDebate.id;
         }
       } catch (error) {
         console.error("Error initializing debate:", error);
+        setIsDebateLoading(false);
         return null;
       }
     };
@@ -208,24 +235,22 @@ export default function Home() {
         const arrayBuffer = await audioBlob.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
 
-        // Only update audio data if there's actual audio content or if AI is typing
-        if (uint8Array.some((val) => val > 0) || aiIsTyping) {
+        // Only update audio data if there's actual audio content
+        const hasAudioContent = uint8Array.some((val) => val > 0);
+
+        // Only update visualization if audio is actually playing or a clear signal is sent
+        if (hasAudioContent && isAudioPlaying) {
           setAudioData(uint8Array);
           // Set audio level for visualization (simplified calculation)
           const sum = uint8Array.reduce((acc, val) => acc + val, 0);
           const avg = sum / uint8Array.length / 255;
-
-          // Ensure minimum level while AI is active and smooth transitions
-          const level = aiIsTyping ? Math.max(0.2, avg) : avg;
-          setAudioLevel(level);
+          setAudioLevel(avg);
           setIsPlaying(true);
-        } else if (!aiIsTyping) {
-          // Only clear visualization if AI is not typing, with a small delay
-          setTimeout(() => {
-            setAudioData(undefined);
-            setAudioLevel(0);
-            setIsPlaying(false);
-          }, 100);
+        } else if (!isAudioPlaying) {
+          // When audio is not playing, always clear visualization
+          setAudioData(undefined);
+          setAudioLevel(0);
+          setIsPlaying(false);
         }
 
         // Collect audio data for the current speaker
@@ -243,69 +268,8 @@ export default function Home() {
         }
       }
     },
-    [aiIsTyping]
+    [isAudioPlaying]
   );
-
-  // Toggle playback for transcript UI (doesn't actually affect audio)
-  const togglePlayback = useCallback(() => {
-    setIsPlaying((prev) => !prev);
-  }, []);
-
-  // Reset playing status when processing stops, but only once
-  useEffect(() => {
-    if (!isProcessing && !isPlaying) {
-      setIsPlaying(true);
-    }
-  }, [isProcessing, isPlaying]);
-
-  // Sync isListening with Debater's isSessionActive state
-  useEffect(() => {
-    // When the debater component updates its session state, it will
-    // apply a different class to the mic button which we can detect
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.target.nodeName === "BUTTON" &&
-          (mutation.target as HTMLElement).classList.contains(
-            "debater-mic-button"
-          )
-        ) {
-          const isActive = (mutation.target as HTMLElement).classList.contains(
-            "border-red-500"
-          );
-          setIsListening(isActive);
-        }
-      });
-    });
-
-    // Start observing the document with the configured parameters
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ["class"],
-      subtree: true,
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  // Handle AI typing state changes
-  const handleAiTypingChange = useCallback((isTyping: boolean) => {
-    setAiIsTyping(isTyping);
-  }, []);
-
-  // Reset audio data when AI stops speaking to hide the visualizer
-  useEffect(() => {
-    if (!aiIsTyping) {
-      // Add a delay before clearing the visualization
-      const timer = setTimeout(() => {
-        setAudioData(undefined);
-        setIsPlaying(false);
-        setAudioLevel(0);
-      }, 1000); // 1 second delay to match other timeouts
-
-      return () => clearTimeout(timer);
-    }
-  }, [aiIsTyping]);
 
   // Function to process collected audio buffer and convert to base64
   const processAudioBuffer = useCallback((speaker: "AI" | "Human") => {
@@ -334,202 +298,328 @@ export default function Home() {
     }
   }, []);
 
-  // Add handler for audio playing state changes
-  const handleAudioPlayingChange = useCallback(
-    (isPlaying: boolean) => {
-      console.log(
-        `🔊 [Page] Audio playing state changed to: ${
-          isPlaying ? "PLAYING" : "STOPPED"
-        }`
-      );
-      setIsAudioPlaying(isPlaying);
+  // Handle AI typing state changes
+  const handleAiTypingChange = useCallback((isTyping: boolean) => {
+    setAiIsTyping(isTyping);
+  }, []);
 
-      // When audio stops playing, ensure we clean up
-      if (!isPlaying && !isListening) {
-        console.log(
-          "🔄 [Page] Audio stopped and not listening, resetting audio data"
-        );
-        // Reset audio data with a small delay to ensure smooth transition
-        setTimeout(() => {
-          setAudioData(undefined);
-          setAudioLevel(0);
-        }, 300);
-      }
-    },
-    [isListening]
-  );
+  // Add handler for audio playing state changes
+  const handleAudioPlayingChange = useCallback((isPlaying: boolean) => {
+    console.log(
+      `🔊 [Page] Audio playing state changed to: ${
+        isPlaying ? "PLAYING" : "STOPPED"
+      }`
+    );
+
+    // Immediately update the playing state so UI can react
+    setIsAudioPlaying(isPlaying);
+
+    // When audio starts, ensure we have some initial level
+    if (isPlaying) {
+      setAudioLevel(0.7); // Set an initial level for better visual feedback
+    }
+    // When audio stops playing, ensure we clean up immediately
+    else {
+      console.log("🔄 [Page] Audio stopped, resetting audio data");
+      // Reset audio data immediately for UI
+      setAudioData(undefined);
+      setAudioLevel(0);
+      setIsPlaying(false);
+    }
+  }, []);
+
+  // New handler for session status changes
+  const handleSessionStatusChange = useCallback((status: string) => {
+    console.log(`🔄 [Page] Session status changed to: ${status}`);
+    setSessionStatus(status);
+  }, []);
 
   return (
-    <div className="h-screen bg-[#0a1017] pb-4">
-      <header className="h-32 items-center flex justify-center max-w-7xl mx-auto relative">
-        <Image
-          src={"/logo.svg"}
-          alt="BuildFastwithAI"
-          width={70}
-          height={70}
-          className="absolute -left-10"
-        />
-        <div className="">
-          <motion.h1
-            className="text-4xl md:text-5xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-500"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            Meet Product Patel
-          </motion.h1>
-          <motion.p
-            className="text-center text-gray-400 mt-2 max-w-2xl mx-auto"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            The AI Product Manager at Build Fast with AI
-          </motion.p>
+    <div className="min-h-screen bg-black text-white flex flex-col">
+      {/* Animated background */}
+      <div className="fixed inset-0 z-0 opacity-20">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.15),transparent_70%)]" />
+        <div className="absolute top-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500 to-transparent" />
+        <div className="absolute bottom-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500 to-transparent" />
+        <div className="absolute left-0 h-full w-px bg-gradient-to-b from-transparent via-emerald-500 to-transparent" />
+        <div className="absolute right-0 h-full w-px bg-gradient-to-b from-transparent via-emerald-500 to-transparent" />
+      </div>
+
+      {/* Header */}
+      <header className="relative z-10 pt-8 pb-4 text-center">
+        <div className="flex items-center justify-center gap-2 mb-1">
+          <Zap className="w-8 h-8 text-emerald-400" />
+          <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">
+            NEXUS
+          </h1>
+          <Zap className="w-8 h-8 text-emerald-400" />
         </div>
-        <div className=""></div>
+        <p className="text-emerald-400/80 text-lg tracking-widest uppercase">
+          Advanced Debate Intelligence
+        </p>
       </header>
-      <div className="container mx-auto px-4 max-w-7xl h-[calc(100%-8rem)]">
-        {/* Header */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-7 gap-6 h-full">
-          {/* Main Content Area */}
-          <div className="lg:col-span-5">
-            <motion.div
-              className="relative bg-[#111827] rounded-2xl border border-gray-800 shadow-xl overflow-hidden h-full flex flex-col items-center justify-center"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              {/* Audio Visualizer Container */}
-              <div className="absolute inset-0 flex flex-col items-center justify-between">
-                {/* Audio Visualization in the Middle */}
-                <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
-                  <div className="w-full h-full pointer-events-none flex items-center justify-center">
-                    <AudioVisualizer
-                      isActive={
-                        !!audioData &&
-                        (isListening || aiIsTyping || isAudioPlaying)
-                      }
-                      audioData={audioData}
-                      isProcessing={isProcessing}
-                      isGenerating={aiIsTyping}
-                      audioPaused={!isAudioPlaying}
-                    />
-                  </div>
-                </div>
+      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6">
+        {/* Main AI visualization */}
+        <div className="flex-1 border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm overflow-hidden flex flex-col">
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="relative">
+              {/* Outer rings */}
+              <div className="absolute inset-0 rounded-full border-2 border-emerald-500/30 animate-[spin_10s_linear_infinite]" />
+              <div className="absolute inset-[-15px] rounded-full border border-emerald-400/20 animate-[spin_15s_linear_infinite_reverse]" />
+              <div className="absolute inset-[-30px] rounded-full border border-emerald-300/10 animate-[spin_20s_linear_infinite]" />
 
-                {/* Mic Button at the Bottom */}
-                <div className="relative flex flex-col items-center mb-6">
-                  {/* Fixed Microphone Button */}
-                  <motion.button
-                    className={`size-20 rounded-full flex items-center justify-center transition-all ${
-                      isListening
-                        ? "bg-red-500 shadow-lg shadow-red-500/30"
-                        : "bg-teal-500 shadow-lg shadow-teal-500/30"
-                    }`}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      setIsListening(!isListening);
-                      // This should trigger the debater's handleStartStopClick
-                      const micButton = document.querySelector(
-                        ".debater-mic-button"
-                      );
-                      if (micButton) {
-                        (micButton as HTMLButtonElement).click();
-                      }
+              {/* Brain activity visualization */}
+              <div className="absolute inset-[-60px] flex items-center justify-center">
+                {brainActivity.map((value, i) => (
+                  <div
+                    key={i}
+                    className="absolute h-20 w-1 bg-emerald-400/30"
+                    style={{
+                      transform: `rotate(${i * 30}deg)`,
+                      height: `${value}px`,
+                      opacity: value / 100,
                     }}
-                  >
-                    {isListening ? (
-                      <Square className="size-8 text-white animate-pulse" />
-                    ) : (
-                      <Mic className="size-8 text-white" />
-                    )}
-                  </motion.button>
+                  />
+                ))}
+              </div>
 
-                  {/* Status Message */}
-                  <div className="text-sm text-gray-400 mt-3">
-                    {isProcessing
-                      ? "Processing..."
-                      : isListening
-                      ? "Listening..."
-                      : "Tap microphone to speak"}
-                  </div>
+              {/* Main AI face */}
+              <div className="relative w-64 h-64 rounded-full bg-gradient-to-br from-black to-emerald-950 border border-emerald-500/50 flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-2 rounded-full bg-black/80" />
+
+                {/* AI eyes */}
+                <div className="relative z-10 flex gap-16">
+                  <div className="w-6 h-6 bg-emerald-400 rounded-sm animate-pulse" />
+                  <div className="w-6 h-6 bg-emerald-400 rounded-sm animate-pulse" />
+                </div>
+
+                {/* Audio visualizer */}
+                <div className="absolute bottom-12 left-0 right-0 flex justify-center gap-1">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-emerald-400/80 rounded-full transition-all duration-100"
+                      style={{
+                        height: isAudioPlaying
+                          ? `${Math.random() * 20 + 2}px`
+                          : "2px",
+                        opacity: isAudioPlaying
+                          ? 0.5 + Math.random() * 0.5
+                          : 0.3,
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Data streams */}
+                <div className="absolute inset-0 pointer-events-none">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute w-px bg-gradient-to-b from-transparent via-emerald-400/30 to-transparent"
+                      style={{
+                        left: `${Math.random() * 100}%`,
+                        height: `${Math.random() * 100}%`,
+                        top: `${Math.random() * 100}%`,
+                        opacity: Math.random() * 0.5,
+                        animationDuration: `${Math.random() * 3 + 2}s`,
+                      }}
+                    />
+                  ))}
                 </div>
               </div>
-
-              {/* Hidden Debater Component */}
-              <div className="opacity-0 pointer-events-none absolute">
-                <Debater
-                  onTranscriptReceived={handleTranscriptReceived}
-                  onAudioResponse={handleAudioResponse}
-                  messages={messages}
-                  onProcessingChange={setIsProcessing}
-                  onAiTypingChange={handleAiTypingChange}
-                  onAudioPlayingChange={handleAudioPlayingChange}
-                />
-              </div>
-            </motion.div>
+            </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-2 space-y-6 flex flex-col">
-            {/* Analysis Panel */}
-            <motion.div
-              className="bg-gray-900 rounded-xl border border-gray-800 shadow-lg overflow-hidden flex-1"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-            >
-              <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-                <h2 className="font-semibold text-white flex items-center">
-                  <BarChart2 className="w-5 h-5 mr-2 text-teal-500" />
-                  Debate Transcript
-                </h2>
-                <button className="text-gray-400 hover:text-white transition-colors">
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-4">
-                {/* <div className="flex items-start gap-2 mb-2">
-                  <Sparkles className="w-4 h-4 text-amber-400 mt-0.5" />
-                </div> */}
-                {/* <p className="text-sm text-gray-300">
-                  {transcript.length > 0
-                    ? "The AI has stated it does not have a name and prefers to be seen as a helpful AI companion. The current topic is the AI's lack of a personal name."
-                    : "Start a conversation to see a summary here."}
-                </p> */}
-                <p className="text-sm text-gray-400">
-                  Hello! I am Product Patel, AI Product Manager at Build Fast
-                  with AI. I’m here at IIM Bangalore to demonstrate a simple
-                  truth: AI product management is not just the future, it is the
-                  present, because it is *better* than human product management.
+          {/* Session Status Display */}
+          {isProcessing && (
+            <div className="mx-8 mb-4 p-3 bg-black/60 border border-emerald-500/30 rounded-lg">
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
+                <p className="text-emerald-400 text-sm font-medium">
+                  {sessionStatus}
                 </p>
               </div>
-            </motion.div>
+            </div>
+          )}
 
-            {/* Audience Poll */}
-            <motion.div
-              className=""
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-            >
-              {currentDebateId ? (
-                <AudiencePoll debateId={currentDebateId} />
-              ) : (
-                <div className="p-4">
-                  <h2 className="text-lg text-white font-semibold">
-                    Loading debate...
-                  </h2>
+          {/* Microphone control */}
+          <div className="p-8 flex justify-center">
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (isDebateLoading || !currentDebateId || isProcessing)
+                    return;
+
+                  setIsListening(!isListening);
+                  // This should trigger the debater's handleStartStopClick
+                  const micButton = document.querySelector(
+                    ".debater-mic-button"
+                  );
+                  if (micButton) {
+                    (micButton as HTMLButtonElement).click();
+                  }
+                }}
+                disabled={isDebateLoading || !currentDebateId || isProcessing}
+                className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  isListening
+                    ? "bg-red-500 text-white"
+                    : "bg-gradient-to-br from-emerald-400 to-teal-600 text-black"
+                } ${
+                  isDebateLoading || !currentDebateId || isProcessing
+                    ? "opacity-50 cursor-not-allowed"
+                    : "opacity-100"
+                }`}
+              >
+                {isDebateLoading || isProcessing ? (
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                ) : isListening ? (
+                  <Square className="w-8 h-8" />
+                ) : (
+                  <Mic className="w-8 h-8" />
+                )}
+              </button>
+
+              {/* Pulse effect */}
+              <div
+                className={`absolute inset-0 rounded-full bg-emerald-400/20 transition-all duration-300 ${
+                  isListening ? "animate-ping" : "opacity-0"
+                }`}
+              />
+
+              {/* Audio level indicator */}
+              <div className="absolute -inset-3 rounded-full border border-emerald-400/30" />
+              <svg className="absolute -inset-3 w-[calc(100%+24px)] h-[calc(100%+24px)]">
+                <circle
+                  cx="50%"
+                  cy="50%"
+                  r="calc(50% - 1px)"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-emerald-400"
+                  strokeDasharray={`${audioLevel * 188} 188`}
+                  strokeDashoffset="0"
+                  transform="rotate(-90, 50%, 50%)"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <div className="px-8 pb-6 text-center text-emerald-400/80 font-light tracking-wider">
+            {isDebateLoading
+              ? "INITIALIZING SESSION..."
+              : isProcessing
+              ? sessionStatus
+              : isListening
+              ? "LISTENING..."
+              : "TAP TO SPEAK"}
+          </div>
+        </div>
+
+        {/* Right sidebar */}
+        <div className="md:w-96 space-y-6">
+          {/* Neural Analysis Panel */}
+          <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-lg font-medium text-emerald-100">
+                  Neural Analysis
+                </h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-emerald-400 h-8 w-8"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="h-48 overflow-y-auto rounded-lg border border-emerald-500/20 bg-black/60 p-3 text-sm">
+              <div className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <Brain className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                  <p className="text-emerald-100/80">
+                    Analyzing argument structure...{" "}
+                    <span className="text-emerald-400">Complete</span>
+                  </p>
                 </div>
-              )}
-            </motion.div>
+                <div className="flex items-start gap-2">
+                  <Wand2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                  <p className="text-emerald-100/80">
+                    Generating counter-arguments based on historical debate
+                    patterns...
+                  </p>
+                </div>
+                <div className="flex items-start gap-2 opacity-60">
+                  <BarChart3 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                  <p className="text-emerald-100/80">
+                    Start a conversation to see real-time analysis.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Audience Consensus */}
+          <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-lg font-medium text-emerald-100">
+                  Audience Consensus
+                </h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-emerald-400 h-8 w-8"
+              >
+                <Share2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {currentDebateId ? (
+              <AudiencePoll debateId={currentDebateId} />
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center py-4 text-emerald-400/60">
+                  Loading debate data...
+                </div>
+              </div>
+            )}
+
+            <Button
+              variant="ghost"
+              className="w-full text-xs text-emerald-400 gap-1 mt-2"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open Voting Dashboard
+            </Button>
           </div>
         </div>
       </div>
+
+      {/* Hidden Debater Component */}
+      <div className="opacity-0 pointer-events-none absolute">
+        <Debater
+          onTranscriptReceived={handleTranscriptReceived}
+          onAudioResponse={handleAudioResponse}
+          messages={messages}
+          onProcessingChange={setIsProcessing}
+          onAiTypingChange={handleAiTypingChange}
+          onAudioPlayingChange={handleAudioPlayingChange}
+          onSessionStatusChange={handleSessionStatusChange}
+        />
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 py-4 text-center text-emerald-400/60 text-xs">
+        NEXUS v2.0 • Quantum Neural Processing • {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }

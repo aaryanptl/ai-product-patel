@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
-import { Mic, Square } from "lucide-react";
+import { Mic, Square, Loader2 } from "lucide-react";
 import { Message } from "ai";
 import AudioVisualizer from "./user-voice-visualizer";
 import useWebRTCAudioSession from "@/hooks/use-webrtc";
@@ -14,6 +14,7 @@ interface DebaterProps {
   onProcessingChange?: (isProcessing: boolean) => void;
   onAiTypingChange?: (isTyping: boolean) => void;
   onAudioPlayingChange?: (isPlaying: boolean) => void;
+  onSessionStatusChange?: (status: string) => void;
 }
 
 export default function Debater({
@@ -23,6 +24,7 @@ export default function Debater({
   onProcessingChange,
   onAiTypingChange,
   onAudioPlayingChange,
+  onSessionStatusChange,
 }: DebaterProps) {
   const [voice, setVoice] = useState("alloy");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -34,6 +36,15 @@ export default function Debater({
   const currentAssistantMessageRef = useRef<string>("");
   const [assistantIsResponding, setAssistantIsResponding] = useState(false);
 
+  // Handle session status changes
+  const handleStatusChange = useCallback(
+    (status: string) => {
+      console.log(`🔄 [Debater] Session status changed: ${status}`);
+      onSessionStatusChange?.(status);
+    },
+    [onSessionStatusChange]
+  );
+
   // Use our WebRTC hook
   const {
     status,
@@ -44,7 +55,7 @@ export default function Debater({
     currentVolume,
     sendTextMessage,
     isAudioPlaying,
-  } = useWebRTCAudioSession(voice);
+  } = useWebRTCAudioSession(voice, undefined, handleStatusChange);
 
   // When the conversation updates, process the messages
   useEffect(() => {
@@ -93,25 +104,86 @@ export default function Debater({
     }
   }, [conversation, onTranscriptReceived, onAiTypingChange, onAudioResponse]);
 
+  // Throttled function to send audio visualization data
+  const sendVisualizationData = useCallback(() => {
+    if (!isSessionActive) return;
+
+    // Return immediately if audio is not playing - this is key to prevent any visualization
+    if (!isAudioPlaying) {
+      // Only send an empty blob if needed
+      if (lastSentVolumeRef.current > 0) {
+        lastSentVolumeRef.current = 0;
+        onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+      }
+      return;
+    }
+
+    const now = Date.now();
+    // Only send visualization updates every 100ms to prevent excessive re-renders
+    if (now - lastVolumeUpdateRef.current < 100) return;
+    lastVolumeUpdateRef.current = now;
+
+    // Only send if volume has changed significantly
+    if (Math.abs(currentVolume - lastSentVolumeRef.current) < 0.05) return;
+    lastSentVolumeRef.current = currentVolume;
+
+    // Create dummy data for visualization based on volume
+    const dataSize = 128;
+    const volumeData = new Uint8Array(dataSize);
+
+    // Create visualizations with actual audio volume data
+    const scaledVolume = Math.min(255, Math.floor(currentVolume * 255));
+    // Add some randomness for a more natural visualization
+    for (let i = 0; i < dataSize; i++) {
+      volumeData[i] = Math.floor(Math.random() * scaledVolume);
+    }
+
+    // Send the visualization data
+    onAudioResponse(
+      new Blob([volumeData], { type: "application/octet-stream" })
+    );
+  }, [currentVolume, isSessionActive, onAudioResponse, isAudioPlaying]);
+
+  // Send audio visualization data with throttling
+  useEffect(() => {
+    let visualizationInterval: NodeJS.Timeout | null = null;
+
+    if (isSessionActive) {
+      visualizationInterval = setInterval(() => {
+        sendVisualizationData();
+      }, 100);
+    }
+
+    return () => {
+      if (visualizationInterval) {
+        clearInterval(visualizationInterval);
+      }
+    };
+  }, [isSessionActive, sendVisualizationData]);
+
   // Log whenever audio playback state changes
   useEffect(() => {
     if (isAudioPlaying) {
       console.log("🔈 [Audio Status] Audio playback started");
       // Notify parent component about audio playing state
       onAudioPlayingChange?.(true);
+
+      // Immediately send initial visualization data
+      const dataSize = 128;
+      const initialData = new Uint8Array(dataSize);
+      for (let i = 0; i < dataSize; i++) {
+        initialData[i] = Math.floor(Math.random() * 200); // Strong initial visualization
+      }
+      onAudioResponse(
+        new Blob([initialData], { type: "application/octet-stream" })
+      );
     } else {
       console.log("🔇 [Audio Status] Audio playback stopped");
       // Explicitly notify parent about audio stopping
       onAudioPlayingChange?.(false);
 
       // Immediately clear visualization when audio stops playing
-      // Adding a small delay to ensure all transitions happen properly
-      setTimeout(() => {
-        console.log(
-          "🧹 [Audio Status] Clearing visualization after audio stop"
-        );
-        onAudioResponse(new Blob([], { type: "application/octet-stream" }));
-      }, 200);
+      onAudioResponse(new Blob([], { type: "application/octet-stream" }));
     }
   }, [isAudioPlaying, onAudioResponse, onAudioPlayingChange]);
 
@@ -125,55 +197,6 @@ export default function Debater({
     onProcessingChange?.(isProc);
   }, [status, onProcessingChange]);
 
-  // Throttled function to send audio visualization data
-  const sendVisualizationData = useCallback(() => {
-    if (!isSessionActive) return;
-
-    const now = Date.now();
-    // Only send visualization updates every 100ms to prevent infinite loops
-    if (now - lastVolumeUpdateRef.current < 100) return;
-    lastVolumeUpdateRef.current = now;
-
-    // Only send if volume has changed significantly
-    if (Math.abs(currentVolume - lastSentVolumeRef.current) < 0.05) return;
-    lastSentVolumeRef.current = currentVolume;
-
-    // Create dummy data for visualization based on volume
-    const dataSize = 128;
-    const volumeData = new Uint8Array(dataSize);
-    const scaledVolume = Math.min(255, Math.floor(currentVolume * 255));
-
-    for (let i = 0; i < dataSize; i++) {
-      volumeData[i] = Math.floor(Math.random() * scaledVolume);
-    }
-
-    onAudioResponse(
-      new Blob([volumeData], { type: "application/octet-stream" })
-    );
-  }, [currentVolume, isSessionActive, onAudioResponse]);
-
-  // Send audio visualization data with throttling
-  useEffect(() => {
-    let visualizationInterval: NodeJS.Timeout | null = null;
-
-    if (isSessionActive && (currentVolume > 0 || assistantIsResponding)) {
-      visualizationInterval = setInterval(() => {
-        sendVisualizationData();
-      }, 100);
-    }
-
-    return () => {
-      if (visualizationInterval) {
-        clearInterval(visualizationInterval);
-      }
-    };
-  }, [
-    currentVolume,
-    isSessionActive,
-    sendVisualizationData,
-    assistantIsResponding,
-  ]);
-
   // Handle text submission
   const handleSubmitText = (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,6 +208,16 @@ export default function Debater({
 
   return (
     <div className="space-y-4">
+      {/* Session Status Indicator */}
+      {isProcessing && (
+        <div className="bg-black/80 border border-emerald-500/30 rounded-lg p-3 mb-2 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
+            <p className="text-emerald-400 text-sm font-medium">{status}</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-center items-center space-x-4">
         <Button
           onClick={handleStartStopClick}
@@ -211,13 +244,15 @@ export default function Debater({
           `}
           />
           <div className="relative z-10 flex items-center justify-center">
-            {isSessionActive ? (
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            ) : isSessionActive ? (
               <Square className="w-5 h-5 text-red-500 transition-transform duration-200 transform" />
             ) : (
               <Mic
                 className={`
                 w-5 h-5 transition-transform duration-200 transform hover:scale-110
-                ${isProcessing ? "text-slate-400" : "text-green-500"}
+                text-green-500
               `}
               />
             )}
