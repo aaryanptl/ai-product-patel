@@ -29,6 +29,8 @@ export default function AudiencePoll({ debateId = "current" }) {
   const [isLoading, setIsLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [lastVote, setLastVote] = useState<"human" | "ai" | null>(null);
+  const [showVoteFeedback, setShowVoteFeedback] = useState(false);
   const [currentDebateId, setCurrentDebateId] = useState<string>(
     typeof debateId === "string" ? debateId : ""
   );
@@ -36,6 +38,43 @@ export default function AudiencePoll({ debateId = "current" }) {
   const totalVotes = votes.human + votes.ai;
   const getPercentage = (value: number) =>
     totalVotes === 0 ? 0 : (value / totalVotes) * 100;
+
+  // Function to fetch vote counts
+  const fetchVoteCounts = async (debateIdToUse: string) => {
+    if (!debateIdToUse) {
+      console.error("No debate ID provided for fetching votes");
+      return;
+    }
+
+    try {
+      // Get vote counts - use count aggregation correctly
+      const { count: humanCount, error: humanError } = await supabase
+        .from("rt_votes")
+        .select("*", { count: "exact", head: true })
+        .eq("debate_id", debateIdToUse)
+        .eq("vote_for", "human");
+
+      const { count: aiCount, error: aiError } = await supabase
+        .from("rt_votes")
+        .select("*", { count: "exact", head: true })
+        .eq("debate_id", debateIdToUse)
+        .eq("vote_for", "ai");
+
+      if (humanError) throw humanError;
+      if (aiError) throw aiError;
+
+      setVotes({
+        human: humanCount || 0,
+        ai: aiCount || 0,
+      });
+
+      console.log(
+        `Fetched votes: human=${humanCount}, ai=${aiCount} for debate ${debateIdToUse}`
+      );
+    } catch (error) {
+      console.error("Error fetching votes:", error);
+    }
+  };
 
   // Load votes from Supabase
   useEffect(() => {
@@ -67,33 +106,10 @@ export default function AudiencePoll({ debateId = "current" }) {
         // Set the share URL
         setShareUrl(`${window.location.origin}/vote/${debateIdToUse}`);
 
-        // Get vote counts - use count aggregation correctly
-        const { count: humanCount, error: humanError } = await supabase
-          .from("rt_votes")
-          .select("*", { count: "exact", head: true })
-          .eq("debate_id", debateIdToUse)
-          .eq("vote_for", "human");
-
-        const { count: aiCount, error: aiError } = await supabase
-          .from("rt_votes")
-          .select("*", { count: "exact", head: true })
-          .eq("debate_id", debateIdToUse)
-          .eq("vote_for", "ai");
-
-        if (humanError) throw humanError;
-        if (aiError) throw aiError;
-
-        setVotes({
-          human: humanCount || 0,
-          ai: aiCount || 0,
-        });
-
-        console.log(
-          `Fetched votes: human=${humanCount}, ai=${aiCount} for debate ${debateIdToUse}`
-        );
+        // Fetch initial vote counts
+        await fetchVoteCounts(debateIdToUse);
       } catch (error) {
-        console.error("Error fetching votes:", error);
-        // Reset votes to 0 in case of error
+        console.error("Error fetching initial data:", error);
         setVotes({ human: 0, ai: 0 });
       } finally {
         setIsLoading(false);
@@ -128,51 +144,56 @@ export default function AudiencePoll({ debateId = "current" }) {
 
       if (!debateIdToUse) return;
 
+      // Set up interval to refetch votes every 10 seconds to ensure data is synchronized
+      const intervalId = setInterval(() => {
+        fetchVoteCounts(debateIdToUse);
+      }, 10000);
+
+      // Subscribe to real-time updates on the votes table
       const votesSubscription = supabase
         .channel(`votes-channel-${debateIdToUse}`)
         .on(
           "postgres_changes",
           {
-            event: "INSERT",
+            event: "*", // Listen for all events (INSERT, UPDATE, DELETE)
             schema: "public",
             table: "rt_votes",
             filter: `debate_id=eq.${debateIdToUse}`,
           },
           (payload) => {
-            // Update vote count when new votes come in
-            if (payload.eventType === "INSERT") {
-              const voteData =
-                payload.new as Database["public"]["Tables"]["rt_votes"]["Row"];
+            console.log("Vote change detected:", payload);
 
-              console.log("New vote received:", voteData);
-
-              if (voteData.vote_for === "human" || voteData.vote_for === "ai") {
-                setVotes((prev) => {
-                  const newVotes = {
-                    ...prev,
-                    [voteData.vote_for]: prev[voteData.vote_for] + 1,
-                  };
-                  console.log("Updated votes:", newVotes);
-                  return newVotes;
-                });
-              }
-            }
+            // Refetch all votes to ensure counts are accurate
+            fetchVoteCounts(debateIdToUse);
           }
         )
         .subscribe((status) => {
           console.log(`Realtime subscription status: ${status}`);
+          if (status !== "SUBSCRIBED") {
+            // If subscription fails, rely on interval refetching
+            console.warn(
+              "Realtime subscription not active, using interval fallback"
+            );
+          }
         });
 
-      return votesSubscription;
+      return { votesSubscription, intervalId };
     };
 
     const subscription = setupRealtime();
 
+    // Cleanup function
     return () => {
       if (subscription) {
-        subscription.then((sub) => {
-          if (sub) supabase.removeChannel(sub);
-        });
+        subscription
+          .then((result) => {
+            if (result) {
+              const { votesSubscription, intervalId } = result;
+              if (votesSubscription) supabase.removeChannel(votesSubscription);
+              if (intervalId) clearInterval(intervalId);
+            }
+          })
+          .catch((err) => console.error("Error cleaning up:", err));
       }
     };
   }, [debateId]);
@@ -187,9 +208,33 @@ export default function AudiencePoll({ debateId = "current" }) {
     }
   };
 
-  const handleVoteClick = (voteFor: "human" | "ai") => {
-    if (currentDebateId) {
-      router.push(`/vote/${currentDebateId}?vote=${voteFor}`);
+  const handleVoteClick = async (voteFor: "human" | "ai") => {
+    if (!currentDebateId) return;
+
+    try {
+      // Submit vote directly to Supabase
+      const { error } = await supabase.from("rt_votes").insert({
+        debate_id: currentDebateId,
+        vote_for: voteFor,
+        created_at: new Date().toISOString(),
+      });
+
+      if (error) throw error;
+
+      // Optimistically update the UI
+      setVotes((prev) => ({
+        ...prev,
+        [voteFor]: prev[voteFor] + 1,
+      }));
+
+      // Show vote feedback
+      setLastVote(voteFor);
+      setShowVoteFeedback(true);
+      setTimeout(() => setShowVoteFeedback(false), 3000);
+
+      console.log(`Vote submitted for ${voteFor}`);
+    } catch (err) {
+      console.error("Error submitting vote:", err);
     }
   };
 
@@ -250,6 +295,13 @@ export default function AudiencePoll({ debateId = "current" }) {
             </div>
           </div>
 
+          {showVoteFeedback && (
+            <div className="text-center text-sm mt-2 text-emerald-500">
+              Thanks! Your vote for {lastVote === "human" ? "Human PMs" : "AI"}{" "}
+              was recorded.
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 mt-4">
             <Button
               variant="outline"
@@ -265,6 +317,10 @@ export default function AudiencePoll({ debateId = "current" }) {
             >
               Vote AI
             </Button>
+          </div>
+
+          <div className="text-center text-xs text-gray-500 mt-1">
+            Total votes: {totalVotes}
           </div>
 
           <Button
