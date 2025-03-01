@@ -22,6 +22,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/types/supabase";
 import Image from "next/image";
 import Link from "next/link";
+import AudioPulseIndicator from "@/components/AudioPulseIndicator";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -58,12 +59,15 @@ export default function Home() {
   useEffect(() => {
     let animationInterval: NodeJS.Timeout | null = null;
 
-    if (isAudioPlaying) {
+    if (isAudioPlaying && isListening) {
       // Update the visualizer every 100ms to create animation
       animationInterval = setInterval(() => {
         // Force re-render to get new random heights
         setAudioLevel((prev) => (prev > 0.5 ? 0.3 : 0.7));
       }, 100);
+    } else {
+      // Ensure animation stops and level is reset when not active
+      setAudioLevel(0);
     }
 
     return () => {
@@ -71,7 +75,7 @@ export default function Home() {
         clearInterval(animationInterval);
       }
     };
-  }, [isAudioPlaying]);
+  }, [isAudioPlaying, isListening]);
 
   // Simulate brain activity for the visualization
   useEffect(() => {
@@ -213,16 +217,14 @@ export default function Home() {
   // Modified function to handle audio response and collect audio data
   const handleAudioResponse = useCallback(
     async (audioBlob: Blob) => {
-      if (audioBlob.size === 0) {
-        // When we receive an empty blob, clear with a small delay
-        setTimeout(() => {
-          setAudioData(undefined);
-          setIsPlaying(false);
-          setAudioLevel(0);
-          // Also clear the audio buffers
-          userAudioBufferRef.current = [];
-          aiAudioBufferRef.current = [];
-        }, 100); // Small delay to ensure smooth transition
+      if (audioBlob.size === 0 || !isListening) {
+        // When we receive an empty blob or listening is off, clear immediately
+        setAudioData(undefined);
+        setIsPlaying(false);
+        setAudioLevel(0);
+        // Also clear the audio buffers
+        userAudioBufferRef.current = [];
+        aiAudioBufferRef.current = [];
         return;
       }
 
@@ -241,15 +243,15 @@ export default function Home() {
         const hasAudioContent = uint8Array.some((val) => val > 0);
 
         // Only update visualization if audio is actually playing or a clear signal is sent
-        if (hasAudioContent && isAudioPlaying) {
+        if (hasAudioContent && isAudioPlaying && isListening) {
           setAudioData(uint8Array);
           // Set audio level for visualization (simplified calculation)
           const sum = uint8Array.reduce((acc, val) => acc + val, 0);
           const avg = sum / uint8Array.length / 255;
           setAudioLevel(avg);
           setIsPlaying(true);
-        } else if (!isAudioPlaying) {
-          // When audio is not playing, always clear visualization
+        } else if (!isAudioPlaying || !isListening) {
+          // When audio is not playing or listening is off, always clear visualization
           setAudioData(undefined);
           setAudioLevel(0);
           setIsPlaying(false);
@@ -270,7 +272,7 @@ export default function Home() {
         }
       }
     },
-    [isAudioPlaying]
+    [isAudioPlaying, isListening]
   );
 
   // Function to process collected audio buffer and convert to base64
@@ -306,29 +308,38 @@ export default function Home() {
   }, []);
 
   // Add handler for audio playing state changes
-  const handleAudioPlayingChange = useCallback((isPlaying: boolean) => {
-    console.log(
-      `🔊 [Page] Audio playing state changed to: ${
-        isPlaying ? "PLAYING" : "STOPPED"
-      }`
-    );
+  const handleAudioPlayingChange = useCallback(
+    (isPlaying: boolean) => {
+      console.log(
+        `🔊 [Page] Audio playing state changed to: ${
+          isPlaying ? "PLAYING" : "STOPPED"
+        }`
+      );
 
-    // Immediately update the playing state so UI can react
-    setIsAudioPlaying(isPlaying);
+      // Only update audio playing state if we're still listening
+      if (isListening) {
+        // Immediately update the playing state so UI can react
+        setIsAudioPlaying(isPlaying);
 
-    // When audio starts, ensure we have some initial level
-    if (isPlaying) {
-      setAudioLevel(0.7); // Set an initial level for better visual feedback
-    }
-    // When audio stops playing, ensure we clean up immediately
-    else {
-      console.log("🔄 [Page] Audio stopped, resetting audio data");
-      // Reset audio data immediately for UI
-      setAudioData(undefined);
-      setAudioLevel(0);
-      setIsPlaying(false);
-    }
-  }, []);
+        // When audio starts, ensure we have some initial level
+        if (isPlaying) {
+          setAudioLevel(0.7); // Set an initial level for better visual feedback
+        }
+      }
+      // When audio stops playing or not listening, ensure we clean up immediately
+      else {
+        console.log(
+          "🔄 [Page] Audio stopped or not listening, resetting audio data"
+        );
+        // Reset audio data immediately for UI
+        setIsAudioPlaying(false);
+        setAudioData(undefined);
+        setAudioLevel(0);
+        setIsPlaying(false);
+      }
+    },
+    [isListening]
+  );
 
   // New handler for session status changes
   const handleSessionStatusChange = useCallback((status: string) => {
@@ -451,6 +462,27 @@ export default function Home() {
                   if (isDebateLoading || !currentDebateId || isProcessing)
                     return;
 
+                  // Stop all audio animations when toggling off the microphone
+                  if (isListening) {
+                    // Immediately stop all audio animations
+                    setIsAudioPlaying(false);
+                    setAudioLevel(0);
+                    setIsPlaying(false);
+                    setAudioData(undefined);
+
+                    // Make sure any ongoing effects are cleared
+                    const resetAnimations = () => {
+                      setIsAudioPlaying(false);
+                      setAudioLevel(0);
+                      setIsPlaying(false);
+                      setAudioData(undefined);
+                    };
+
+                    // Double cleanup with small delay to ensure everything is reset
+                    resetAnimations();
+                    setTimeout(resetAnimations, 50);
+                  }
+
                   setIsListening(!isListening);
                   // This should trigger the debater's handleStartStopClick
                   const micButton = document.querySelector(
@@ -480,29 +512,11 @@ export default function Home() {
                 )}
               </button>
 
-              {/* Pulse effect */}
-              <div
-                className={`absolute inset-0 rounded-full bg-emerald-400/20 transition-all duration-300 ${
-                  isListening ? "animate-ping" : "opacity-0"
-                }`}
+              {/* Replace pulse and audio indicators with new component */}
+              <AudioPulseIndicator
+                isListening={isListening}
+                audioLevel={audioLevel}
               />
-
-              {/* Audio level indicator */}
-              <div className="absolute -inset-3 rounded-full border border-emerald-400/30" />
-              {/* <svg className="absolute -inset-3 w-[calc(100%+24px)] h-[calc(100%+24px)]">
-                <circle
-                  cx="50%"
-                  cy="50%"
-                  r="calc(50% - 1px)"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="text-emerald-400"
-                  strokeDasharray={`${audioLevel * 188} 188`}
-                  strokeDashoffset="0"
-                  transform="rotate(-90, 50%, 50%)"
-                />
-              </svg> */}
             </div>
           </div>
 
