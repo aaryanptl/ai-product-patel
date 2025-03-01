@@ -443,18 +443,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Session Status Display */}
-          {isProcessing && (
-            <div className="mx-8 mb-4 p-3 bg-black/60 border border-emerald-500/30 rounded-lg">
-              <div className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
-                <p className="text-emerald-400 text-sm font-medium">
-                  {sessionStatus}
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Microphone control */}
           <div className="p-8 flex justify-center">
             <div className="relative">
@@ -501,7 +489,7 @@ export default function Home() {
 
               {/* Audio level indicator */}
               <div className="absolute -inset-3 rounded-full border border-emerald-400/30" />
-              <svg className="absolute -inset-3 w-[calc(100%+24px)] h-[calc(100%+24px)]">
+              {/* <svg className="absolute -inset-3 w-[calc(100%+24px)] h-[calc(100%+24px)]">
                 <circle
                   cx="50%"
                   cy="50%"
@@ -514,7 +502,7 @@ export default function Home() {
                   strokeDashoffset="0"
                   transform="rotate(-90, 50%, 50%)"
                 />
-              </svg>
+              </svg> */}
             </div>
           </div>
 
