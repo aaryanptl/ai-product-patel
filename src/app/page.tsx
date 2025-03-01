@@ -20,6 +20,8 @@ import Debater from "@/components/debater";
 import AudiencePoll from "@/components/audience-poll";
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/types/supabase";
+import Image from "next/image";
+import Link from "next/link";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -346,20 +348,29 @@ export default function Home() {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 pt-8 pb-4 text-center">
+      <header className="relative z-10 pt-8 pb-4 text-center items-center">
+        <Link href="https://buildfastwithai.com">
+          <Image
+            src="/logo.svg"
+            alt="Build Fast with AI"
+            width={70}
+            height={70}
+            className="absolute left-10"
+          />
+        </Link>
         <div className="flex items-center justify-center gap-2 mb-1">
           <Zap className="w-8 h-8 text-emerald-400" />
           <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">
-            NEXUS
+            MEET PRODUCT PATEL
           </h1>
           <Zap className="w-8 h-8 text-emerald-400" />
         </div>
         <p className="text-emerald-400/80 text-lg tracking-widest uppercase">
-          Advanced Debate Intelligence
+          The AI Product Manager at Build Fast with AI
         </p>
       </header>
 
-      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6">
+      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 container w-full mx-auto">
         {/* Main AI visualization */}
         <div className="flex-1 border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm overflow-hidden flex flex-col">
           <div className="flex-1 flex items-center justify-center p-8">
@@ -521,14 +532,12 @@ export default function Home() {
         {/* Right sidebar */}
         <div className="md:w-96 space-y-6">
           {/* Neural Analysis Panel */}
-          <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-emerald-400" />
-                <h2 className="text-lg font-medium text-emerald-100">
-                  Neural Analysis
-                </h2>
-              </div>
+          <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm overflow-hidden">
+            <div className="p-4 border-b border-emerald-500/30 flex justify-between items-center">
+              <h2 className="font-semibold text-emerald-100 flex items-center">
+                <Activity className="w-5 h-5 mr-2 text-emerald-400" />
+                Debate Transcript
+              </h2>
               <Button
                 variant="ghost"
                 size="icon"
@@ -538,68 +547,18 @@ export default function Home() {
               </Button>
             </div>
 
-            <div className="h-48 overflow-y-auto rounded-lg border border-emerald-500/20 bg-black/60 p-3 text-sm">
-              <div className="space-y-3">
-                <div className="flex items-start gap-2">
-                  <Brain className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                  <p className="text-emerald-100/80">
-                    Analyzing argument structure...{" "}
-                    <span className="text-emerald-400">Complete</span>
-                  </p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Wand2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                  <p className="text-emerald-100/80">
-                    Generating counter-arguments based on historical debate
-                    patterns...
-                  </p>
-                </div>
-                <div className="flex items-start gap-2 opacity-60">
-                  <BarChart3 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                  <p className="text-emerald-100/80">
-                    Start a conversation to see real-time analysis.
-                  </p>
-                </div>
-              </div>
+            <div className="p-4">
+              <p className="text-sm text-emerald-100/80">
+                Hello! I am Product Patel, AI Product Manager at Build Fast with
+                AI. I&apos;m here at IIM Bangalore to demonstrate a simple
+                truth: AI product management is not just the future, it is the
+                present, because it is *better* than human product management.
+              </p>
             </div>
           </div>
 
           {/* Audience Consensus */}
-          <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Share2 className="w-5 h-5 text-emerald-400" />
-                <h2 className="text-lg font-medium text-emerald-100">
-                  Audience Consensus
-                </h2>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-emerald-400 h-8 w-8"
-              >
-                <Share2 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {currentDebateId ? (
-              <AudiencePoll debateId={currentDebateId} />
-            ) : (
-              <div className="space-y-4">
-                <div className="text-center py-4 text-emerald-400/60">
-                  Loading debate data...
-                </div>
-              </div>
-            )}
-
-            <Button
-              variant="ghost"
-              className="w-full text-xs text-emerald-400 gap-1 mt-2"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Open Voting Dashboard
-            </Button>
-          </div>
+          <AudiencePoll debateId={currentDebateId!} />
         </div>
       </div>
 
@@ -618,7 +577,9 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="relative z-10 py-4 text-center text-emerald-400/60 text-xs">
-        NEXUS v2.0 • Quantum Neural Processing • {new Date().getFullYear()}
+        powered by{" "}
+        <Link href="https://buildfastwithai.com">Build Fast with AI</Link> •{" "}
+        {new Date().getFullYear()}
       </footer>
     </div>
   );

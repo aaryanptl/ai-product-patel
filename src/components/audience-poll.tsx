@@ -36,8 +36,12 @@ export default function AudiencePoll({ debateId = "current" }) {
   );
 
   const totalVotes = votes.human + votes.ai;
+
   const getPercentage = (value: number) =>
     totalVotes === 0 ? 0 : (value / totalVotes) * 100;
+
+  const humanVotes = getPercentage(votes.human);
+  const aiVotes = getPercentage(votes.ai);
 
   // Function to fetch vote counts
   const fetchVoteCounts = async (debateIdToUse: string) => {
@@ -238,92 +242,113 @@ export default function AudiencePoll({ debateId = "current" }) {
     }
   };
 
+  const openVotingDashboard = () => {
+    if (currentDebateId) {
+      router.push(`/dashboard/${currentDebateId}`);
+    }
+  };
+
   return (
-    <Card className="bg-[#111827] border-slate-800 backdrop-blur-xl p-4 rounded-3xl">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg text-white font-semibold">Audience Poll</h2>
+    <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Share2 className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-lg font-medium text-emerald-100">
+            Audience Consensus
+          </h2>
+        </div>
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-gray-400 hover:text-white hover:bg-zinc-800"
+          className="text-emerald-400 h-8 w-8"
           onClick={handleShareLink}
         >
           {copied ? (
             <span className="text-xs text-emerald-500">Copied!</span>
           ) : (
-            <Share2 className="size-4" />
+            <Share2 className="h-4 w-4" />
           )}
         </Button>
       </div>
 
       {isLoading ? (
         <div className="space-y-4 animate-pulse">
-          <div className="h-12 bg-zinc-800 rounded-lg" />
-          <div className="h-12 bg-zinc-800 rounded-lg" />
+          <div className="h-6 bg-emerald-950/50 rounded-lg" />
+          <div className="h-3 bg-emerald-950/50 rounded-full" />
+          <div className="h-6 bg-emerald-950/50 rounded-lg mt-4" />
+          <div className="h-3 bg-emerald-950/50 rounded-full" />
           <div className="grid grid-cols-2 gap-3 mt-4">
-            <div className="h-10 bg-zinc-800 rounded-lg" />
-            <div className="h-10 bg-zinc-800 rounded-lg" />
+            <div className="h-10 bg-emerald-950/50 rounded-lg" />
+            <div className="h-10 bg-emerald-950/50 rounded-lg" />
           </div>
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="relative h-12">
-            <div className="absolute bg-zinc-900 inset-0 rounded-lg" />
-            <motion.div
-              className="absolute inset-y-0 left-0 bg-sky-700 rounded-lg"
-              initial={{ width: "0%" }}
-              animate={{ width: `${getPercentage(votes.human)}%` }}
-              transition={{ duration: 0.5 }}
-            />
-            <div className="absolute inset-0 flex items-center justify-between px-3">
-              <span className="font-medium">Human PMs</span>
-              <span>{getPercentage(votes.human).toFixed(1)}%</span>
+          {/* Human votes */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-emerald-100/80">Human Position</span>
+              <span className="text-emerald-400">{humanVotes.toFixed(1)}%</span>
+            </div>
+            <div className="relative h-3 w-full overflow-hidden rounded-full bg-emerald-950/50">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
+                style={{ width: `${humanVotes}%` }}
+              />
             </div>
           </div>
 
-          <div className="relative h-12">
-            <div className="absolute inset-0 bg-zinc-900 rounded-lg" />
-            <motion.div
-              className="absolute inset-y-0 left-0 bg-teal-700 rounded-lg"
-              initial={{ width: "0%" }}
-              animate={{ width: `${getPercentage(votes.ai)}%` }}
-              transition={{ duration: 0.5 }}
-            />
-            <div className="absolute inset-0 flex items-center justify-between px-3">
-              <span className="font-medium">AI</span>
-              <span>{getPercentage(votes.ai).toFixed(1)}%</span>
+          {/* AI votes */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-emerald-100/80">AI Position</span>
+              <span className="text-emerald-400">{aiVotes.toFixed(1)}%</span>
+            </div>
+            <div className="relative h-3 w-full overflow-hidden rounded-full bg-emerald-950/50">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
+                style={{ width: `${aiVotes}%` }}
+              />
             </div>
           </div>
 
           {showVoteFeedback && (
             <div className="text-center text-sm mt-2 text-emerald-500">
-              Thanks! Your vote for {lastVote === "human" ? "Human PMs" : "AI"}{" "}
-              was recorded.
+              Thanks! Your vote for {lastVote === "human" ? "Human" : "AI"} was
+              recorded.
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 mt-4">
+          {/* Vote buttons */}
+          <div className="grid grid-cols-2 gap-3 pt-2">
             <Button
-              variant="outline"
-              className="border-blue-500/50 hover:bg-sky-600"
               onClick={() => handleVoteClick("human")}
+              className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border-none"
             >
               Vote Human
             </Button>
             <Button
-              variant="outline"
-              className="border-teal-500/50 hover:bg-teal-600"
               onClick={() => handleVoteClick("ai")}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border-none"
             >
               Vote AI
             </Button>
           </div>
 
-          <div className="text-center text-xs text-gray-500 mt-1">
+          <div className="text-center text-xs text-emerald-400/60">
             Total votes: {totalVotes}
           </div>
+
+          <Button
+            variant="ghost"
+            className="w-full text-xs text-emerald-400 gap-1 mt-2"
+            onClick={openVotingDashboard}
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open Voting Dashboard
+          </Button>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
