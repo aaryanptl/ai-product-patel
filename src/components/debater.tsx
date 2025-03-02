@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Button } from "./ui/button";
-import { Mic, Square, Loader2 } from "lucide-react";
-import { Message } from "ai";
-import AudioVisualizer from "./user-voice-visualizer";
 import useWebRTCAudioSession from "@/hooks/use-webrtc";
+import { Message } from "ai";
+import { Loader2, Mic, Square } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "./ui/button";
 
 interface DebaterProps {
   onTranscriptReceived: (text: string, speaker: "AI" | "Human") => void;

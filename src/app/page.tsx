@@ -47,6 +47,13 @@ export default function Home() {
   const [brainActivity, setBrainActivity] = useState(Array(12).fill(0));
   const [isPlaying, setIsPlaying] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<string>("");
+  const [debateSummary, setDebateSummary] = useState<string>(
+    "Hello! I am Product Patel, AI Product Manager at Build Fast with AI. I'm here at IIM Bangalore to demonstrate a simple truth: AI product management is not just the future, it is the present, because it is *better* than human product management."
+  );
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [audioAnalysis, setAudioAnalysis] = useState<string>("");
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // References for audio handling
   const lastAudioUpdateTimeRef = useRef(0);
@@ -100,12 +107,10 @@ export default function Home() {
           .single();
 
         if (!error && existingDebate) {
-          console.log("Found existing debate:", existingDebate);
           setCurrentDebateId(existingDebate.id);
           setIsDebateLoading(false);
           return existingDebate.id;
         } else {
-          console.log("No active debate found, creating new one");
           // Create a new debate
           const { data: newDebate, error: createError } = await supabase
             .from("rt_debates")
@@ -122,8 +127,6 @@ export default function Home() {
             console.error("Error creating debate:", createError);
             throw createError;
           }
-
-          console.log("Created new debate:", newDebate);
           setCurrentDebateId(newDebate.id);
           setIsDebateLoading(false);
           return newDebate.id;
@@ -347,6 +350,122 @@ export default function Home() {
     setSessionStatus(status);
   }, []);
 
+  // Effect to fetch a summary whenever the transcript changes with new AI messages
+  useEffect(() => {
+    const fetchDebateSummary = async () => {
+      // Only generate a summary if we have at least 2 messages (1 exchange)
+      if (transcript.length < 2) return;
+
+      // Check if the last message is from AI and is final (not being typed)
+      const lastMessage = transcript[transcript.length - 1];
+      if (lastMessage.speaker !== "AI" || aiIsTyping) return;
+
+      // Don't update while audio is still playing
+      if (isAudioPlaying) return;
+
+      // Add a small delay after audio stops to ensure everything is processed
+      const timeoutId = setTimeout(() => {
+        // Only show loading indicator if we don't have a summary yet
+        const shouldShowLoading = !debateSummary.trim();
+
+        if (shouldShowLoading) {
+          setIsLoadingSummary(true);
+        } else {
+          // Start transition animation if we already have text
+          setIsTransitioning(true);
+        }
+
+        try {
+          fetch("/api/summary", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ transcript }),
+          })
+            .then((response) => {
+              if (!response.ok) throw new Error("Failed to fetch summary");
+              return response.json();
+            })
+            .then((data) => {
+              setDebateSummary(data.summary);
+              setIsLoadingSummary(false);
+
+              // End transition after a short delay
+              setTimeout(() => {
+                setIsTransitioning(false);
+              }, 300);
+            })
+            .catch((error) => {
+              console.error("Error fetching debate summary:", error);
+              setIsLoadingSummary(false);
+              setIsTransitioning(false);
+            });
+        } catch (error) {
+          console.error("Error initiating debate summary fetch:", error);
+          setIsLoadingSummary(false);
+          setIsTransitioning(false);
+        }
+      }, 1500); // 1.5 second delay after audio stops playing
+
+      return () => clearTimeout(timeoutId);
+    };
+
+    fetchDebateSummary();
+  }, [transcript, aiIsTyping, isAudioPlaying, debateSummary]);
+
+  // Effect to fetch audio analysis when new audio is available
+  useEffect(() => {
+    const fetchAudioAnalysis = async () => {
+      // Only proceed if we have at least one audio source and at least 2 messages
+      if ((!recentUserAudio && !recentAIAudio) || transcript.length < 2) return;
+
+      // Check if the last message is from AI (meaning an exchange just completed)
+      const lastMessage = transcript[transcript.length - 1];
+      if (lastMessage.speaker !== "AI") return;
+
+      // Don't update while audio is still playing
+      if (isAudioPlaying) return;
+
+      // Add a small delay after audio stops to ensure everything is processed
+      const timeoutId = setTimeout(() => {
+        setIsLoadingAnalysis(true);
+        try {
+          fetch("/api/audio-analysis", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userAudio: recentUserAudio,
+              aiAudio: recentAIAudio,
+              transcript: transcript.slice(-4), // Send recent transcript for context
+            }),
+          })
+            .then((response) => {
+              if (!response.ok) throw new Error("Failed to analyze audio");
+              return response.json();
+            })
+            .then((data) => {
+              setAudioAnalysis(data.analysis);
+              setIsLoadingAnalysis(false);
+            })
+            .catch((error) => {
+              console.error("Error analyzing audio:", error);
+              setIsLoadingAnalysis(false);
+            });
+        } catch (error) {
+          console.error("Error initiating audio analysis:", error);
+          setIsLoadingAnalysis(false);
+        }
+      }, 1500); // 1.5 second delay after audio stops playing
+
+      return () => clearTimeout(timeoutId);
+    };
+
+    fetchAudioAnalysis();
+  }, [recentUserAudio, recentAIAudio, transcript, isAudioPlaying]);
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Animated background */}
@@ -521,13 +640,35 @@ export default function Home() {
           </div>
 
           <div className="px-8 pb-6 text-center text-emerald-400/80 font-light tracking-wider">
-            {isDebateLoading
-              ? "INITIALIZING SESSION..."
-              : isProcessing
-              ? sessionStatus
-              : isListening
-              ? "LISTENING..."
-              : "TAP TO SPEAK"}
+            {isDebateLoading ? (
+              "INITIALIZING SESSION..."
+            ) : isProcessing ? (
+              sessionStatus
+            ) : isListening ? (
+              "LISTENING..."
+            ) : sessionStatus && sessionStatus.startsWith("Error") ? (
+              <div className="space-y-2">
+                <div className="text-red-400">{sessionStatus}</div>
+                <button
+                  onClick={() => {
+                    setIsListening(false);
+                    setSessionStatus("");
+                    // Trigger retry by toggling the debater's mic button
+                    const micButton = document.querySelector(
+                      ".debater-mic-button"
+                    );
+                    if (micButton) {
+                      (micButton as HTMLButtonElement).click();
+                    }
+                  }}
+                  className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            ) : (
+              "TAP TO SPEAK"
+            )}
           </div>
         </div>
 
@@ -544,18 +685,82 @@ export default function Home() {
                 variant="ghost"
                 size="icon"
                 className="text-emerald-400 h-8 w-8"
+                onClick={async () => {
+                  if (transcript.length < 2) return;
+
+                  // Don't update while audio is still playing
+                  if (isAudioPlaying) {
+                    // Provide visual feedback that we're waiting for audio to complete
+                    setSessionStatus("Waiting for audio to complete...");
+                    setTimeout(() => setSessionStatus(""), 2000);
+                    return;
+                  }
+
+                  // Only show loading indicator if we don't have a summary yet
+                  const shouldShowLoading = !debateSummary.trim();
+
+                  if (shouldShowLoading) {
+                    setIsLoadingSummary(true);
+                  } else {
+                    // Start transition animation if we already have text
+                    setIsTransitioning(true);
+                  }
+
+                  try {
+                    const response = await fetch("/api/summary", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ transcript }),
+                    });
+
+                    if (!response.ok)
+                      throw new Error("Failed to fetch summary");
+
+                    const data = await response.json();
+                    setDebateSummary(data.summary);
+                    setIsLoadingSummary(false);
+
+                    // End transition after a short delay
+                    setTimeout(() => {
+                      setIsTransitioning(false);
+                    }, 300);
+                  } catch (error) {
+                    console.error("Error fetching debate summary:", error);
+                    setIsLoadingSummary(false);
+                    setIsTransitioning(false);
+                  }
+                }}
               >
-                <RefreshCw className="h-4 w-4" />
+                {isLoadingSummary ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
               </Button>
             </div>
 
-            <div className="p-4">
-              <p className="text-sm text-emerald-100/80">
-                Hello! I am Product Patel, AI Product Manager at Build Fast with
-                AI. I&apos;m here at IIM Bangalore to demonstrate a simple
-                truth: AI product management is not just the future, it is the
-                present, because it is *better* than human product management.
-              </p>
+            <div className="p-4 space-y-4 max-h-80 overflow-y-auto">
+              {/* Debate Summary */}
+              <div>
+                <div className="p-3 rounded-lg bg-emerald-900/20 border border-emerald-500/20">
+                  <p
+                    className={`text-sm text-emerald-100/80 transition-opacity duration-300 ${
+                      isTransitioning ? "opacity-30" : "opacity-100"
+                    }`}
+                  >
+                    {isLoadingSummary && !debateSummary ? (
+                      <span className="flex items-center">
+                        <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                        Generating summary...
+                      </span>
+                    ) : (
+                      debateSummary
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 

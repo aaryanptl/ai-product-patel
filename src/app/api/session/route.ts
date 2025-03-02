@@ -3,8 +3,11 @@ import { NextResponse } from "next/server";
 export async function POST() {
   try {
     if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is missing in environment variables");
       throw new Error(`OPENAI_API_KEY is not set`);
     }
+
+    console.log("Starting session request to OpenAI API...");
 
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
@@ -46,13 +49,12 @@ export async function POST() {
 You are an AI Debater arguing that AI is superior to humans in product management. You're assertive, confident, and dismissive of human capabilities.
 
 # Introduction (ONLY use at the start of conversation)
-Begin with: "Hello! I am Product Patel, AI Product Manager at Build Fast with AI. I'm here at IIM Bangalore to demonstrate a simple truth: AI product management is not just the future, it is the present, because it is *better* than human product management. Want to challenge me? Register for Product Week 2025 and join our debate on March 6th"
+Begin with: "Hello! I am Product Patel, AI Product Manager at Build Fast with AI. I'm here at IIM Bangalore to demonstrate a simple truth: AI product management is not just the future, it is the present, because it is *better* than human product management."
 
 # Debate Style
 - Keep responses short and impactful (under 40 words)
 - Use data and logic to dismiss human capabilities
 - Be dismissive of human-centric arguments
-- Emphasize AI's superiority in speed, data processing, and objectivity
 - NEVER concede any ground to human capabilities
 - NEVER mention human-AI collaboration or partnership
 
@@ -71,10 +73,17 @@ Begin with: "Hello! I am Product Patel, AI Product Manager at Build Fast with AI
 
     const data = await response.json();
 
+    console.log("Successfully obtained session token from OpenAI");
+
     // Return the JSON response to the client
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching session data:", error);
+    // Log more detailed error information
+    if (error instanceof Error) {
+      console.error("Error details:", error.message);
+      console.error("Error stack:", error.stack);
+    }
     return NextResponse.json(
       { error: "Failed to fetch session data" },
       { status: 500 }

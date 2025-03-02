@@ -93,9 +93,6 @@ export default function useWebRTCAudioSession(
    * Configure the data channel on open, sending a session update to the server.
    */
   function configureDataChannel(dataChannel: RTCDataChannel) {
-    console.log("🔌 Data channel opened, configuring session...");
-
-    // Send session update
     const sessionUpdate = {
       type: "session.update",
       session: {
@@ -106,10 +103,8 @@ export default function useWebRTCAudioSession(
         },
       },
     };
-    console.log("📤 Sending session update:", sessionUpdate);
     dataChannel.send(JSON.stringify(sessionUpdate));
 
-    // Send language preference message
     const languageMessage = {
       type: "conversation.item.create",
       item: {
@@ -123,14 +118,11 @@ export default function useWebRTCAudioSession(
         ],
       },
     };
-    console.log("📤 Sending initial greeting message");
     dataChannel.send(JSON.stringify(languageMessage));
 
-    // Request initial response from AI
     const responseCreate = {
       type: "response.create",
     };
-    console.log("📤 Requesting initial AI response");
     dataChannel.send(JSON.stringify(responseCreate));
   }
 
@@ -140,7 +132,6 @@ export default function useWebRTCAudioSession(
   function getOrCreateEphemeralUserId(): string {
     let ephemeralId = ephemeralUserMessageIdRef.current;
     if (!ephemeralId) {
-      // Use uuidv4 for a robust unique ID
       ephemeralId = uuidv4();
       ephemeralUserMessageIdRef.current = ephemeralId;
 
@@ -153,7 +144,6 @@ export default function useWebRTCAudioSession(
         status: "speaking",
       };
 
-      // Append the ephemeral item to conversation
       setConversation((prev) => [...prev, newMessage]);
     }
     return ephemeralId;
@@ -164,7 +154,7 @@ export default function useWebRTCAudioSession(
    */
   function updateEphemeralUserMessage(partial: Partial<Conversation>) {
     const ephemeralId = ephemeralUserMessageIdRef.current;
-    if (!ephemeralId) return; // no ephemeral user message to update
+    if (!ephemeralId) return;
 
     setConversation((prev) =>
       prev.map((msg) => {
@@ -189,14 +179,12 @@ export default function useWebRTCAudioSession(
   async function handleDataChannelMessage(event: MessageEvent) {
     try {
       const msg = JSON.parse(event.data);
-      console.log("📥 Incoming dataChannel message:", msg.type);
 
       switch (msg.type) {
         /**
          * User speech started
          */
         case "input_audio_buffer.speech_started": {
-          console.log("🎤 [Audio Status] User started speaking");
           getOrCreateEphemeralUserId();
           updateEphemeralUserMessage({ status: "speaking" });
           break;
@@ -206,7 +194,6 @@ export default function useWebRTCAudioSession(
          * User speech stopped
          */
         case "input_audio_buffer.speech_stopped": {
-          console.log("🛑 [Audio Status] User stopped speaking");
           updateEphemeralUserMessage({ status: "speaking" });
           break;
         }
@@ -215,7 +202,6 @@ export default function useWebRTCAudioSession(
          * Audio buffer committed => "Processing speech..."
          */
         case "input_audio_buffer.committed": {
-          console.log("💾 Audio buffer committed");
           updateEphemeralUserMessage({
             text: "Processing speech...",
             status: "processing",
@@ -229,7 +215,6 @@ export default function useWebRTCAudioSession(
         case "conversation.item.input_audio_transcription": {
           const partialText =
             msg.transcript ?? msg.text ?? "User is speaking...";
-          console.log("📝 Partial transcription:", partialText);
           updateEphemeralUserMessage({
             text: partialText,
             status: "speaking",
@@ -242,7 +227,6 @@ export default function useWebRTCAudioSession(
          * Final user transcription
          */
         case "conversation.item.input_audio_transcription.completed": {
-          console.log("✅ Final user transcription:", msg.transcript);
           updateEphemeralUserMessage({
             text: msg.transcript || "",
             isFinal: true,
@@ -256,11 +240,6 @@ export default function useWebRTCAudioSession(
          * Streaming AI transcripts (assistant partial)
          */
         case "response.audio_transcript.delta": {
-          console.log(
-            "🗣️ [Audio Status] AI is speaking:",
-            msg.delta.substring(0, 20) + (msg.delta.length > 20 ? "..." : "")
-          );
-
           const newMessage: Conversation = {
             id: uuidv4(),
             role: "assistant",
@@ -289,43 +268,24 @@ export default function useWebRTCAudioSession(
          * Audio playback actually started
          */
         case "output_audio_buffer.started": {
-          console.log(
-            "🔊 [Audio Status] Output audio buffer STARTED - SHOWING VISUALIZER"
-          );
-          // Set audio as playing when we actually have audio output
           setIsAudioPlaying(true);
-          // Set initial volume level for visualization
           setCurrentVolume(0.8);
           break;
         }
 
         case "output_audio_buffer.stopped": {
-          console.log(
-            "🔊 [Audio Status] Output audio buffer stopped - HIDING VISUALIZER"
-          );
-          // Immediately reset volume and mark audio as not playing
           setCurrentVolume(0);
           setIsAudioPlaying(false);
           break;
         }
 
         case "response.audio_transcript.done": {
-          console.log("✅ [Audio Status] AI finished speaking transcript");
-
-          // First mark the message as final
           setConversation((prev) => {
             if (prev.length === 0) return prev;
             const updated = [...prev];
             updated[updated.length - 1].isFinal = true;
             return updated;
           });
-
-          // Don't set isAudioPlaying to false here!
-          // The audio buffer may still be playing even after transcription is done
-          // Wait for output_audio_buffer.stopped event to actually stop visualization
-          console.log(
-            "🔈 [Audio Status] Transcript done but keeping animation until audio buffer stops"
-          );
           break;
         }
 
@@ -338,7 +298,6 @@ export default function useWebRTCAudioSession(
             const args = JSON.parse(msg.arguments);
             const result = await fn(args);
 
-            // Respond with function output
             const response = {
               type: "conversation.item.create",
               item: {
@@ -363,7 +322,6 @@ export default function useWebRTCAudioSession(
         }
       }
 
-      // Always log the raw message
       setMsgs((prevMsgs) => [...prevMsgs, msg]);
       return msg;
     } catch (error) {
@@ -384,40 +342,11 @@ export default function useWebRTCAudioSession(
         throw new Error(`Failed to get ephemeral token: ${response.status}`);
       }
       const data = await response.json();
-      return data.client_secret.value;
+      return data.client_token || data.client_secret?.value;
     } catch (err) {
       console.error("getEphemeralToken error:", err);
       throw err;
     }
-  }
-
-  /**
-   * Sets up a local audio visualization for mic input (toggle wave CSS).
-   */
-  function setupAudioVisualization(stream: MediaStream) {
-    const audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
-    const analyzer = audioContext.createAnalyser();
-    analyzer.fftSize = 256;
-    source.connect(analyzer);
-
-    const bufferLength = analyzer.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const updateIndicator = () => {
-      if (!audioContext) return;
-      analyzer.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-
-      // Toggle an "active" class if volume is above a threshold
-      if (audioIndicatorRef.current) {
-        audioIndicatorRef.current.classList.toggle("active", average > 30);
-      }
-      requestAnimationFrame(updateIndicator);
-    };
-    updateIndicator();
-
-    audioContextRef.current = audioContext;
   }
 
   /**
@@ -441,32 +370,48 @@ export default function useWebRTCAudioSession(
    */
   async function startSession() {
     try {
-      console.log("🚀 Starting WebRTC session with OpenAI...");
       setStatus("Requesting microphone access...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Try to get microphone access with better error handling
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (micError: any) {
+        console.error("Microphone access error:", micError);
+
+        if (micError.name === "NotReadableError") {
+          setStatus(
+            "Error: Microphone is busy or unavailable. Please close other apps using the microphone and try again."
+          );
+          return;
+        } else if (micError.name === "NotAllowedError") {
+          setStatus(
+            "Error: Microphone permission denied. Please allow microphone access."
+          );
+          return;
+        } else {
+          setStatus(
+            `Error accessing microphone: ${micError.message || micError.name}`
+          );
+          return;
+        }
+      }
+
       audioStreamRef.current = stream;
-      setupAudioVisualization(stream);
-      console.log("🎤 Microphone access granted");
 
       setStatus("Fetching ephemeral token...");
       const ephemeralToken = await getEphemeralToken();
-      console.log("🔑 Received ephemeral token");
 
       setStatus("Establishing connection...");
       const pc = new RTCPeerConnection();
       peerConnectionRef.current = pc;
-      console.log("📡 Created peer connection");
 
-      // Hidden <audio> element for inbound assistant TTS
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
 
-      // Inbound track => assistant's TTS
       pc.ontrack = (event) => {
-        console.log("🔊 Received audio track from server");
         audioEl.srcObject = event.streams[0];
 
-        // Optional: measure inbound volume
         const audioCtx = new (window.AudioContext || window.AudioContext)();
         const src = audioCtx.createMediaStreamSource(event.streams[0]);
         const inboundAnalyzer = audioCtx.createAnalyser();
@@ -474,31 +419,24 @@ export default function useWebRTCAudioSession(
         src.connect(inboundAnalyzer);
         analyserRef.current = inboundAnalyzer;
 
-        // Add event listeners to detect when audio starts playing
         audioEl.addEventListener("playing", () => {
-          console.log("🔊 Audio playback started");
           setIsAudioPlaying(true);
-          setCurrentVolume(0.8); // Set initial volume
+          setCurrentVolume(0.8);
         });
 
-        // Add event listeners to detect when audio stops
         audioEl.addEventListener("ended", () => {
-          console.log("🔊 Audio playback ended");
           setCurrentVolume(0);
           setIsAudioPlaying(false);
         });
 
         audioEl.addEventListener("pause", () => {
-          console.log("🔊 Audio playback paused");
           setCurrentVolume(0);
           setIsAudioPlaying(false);
         });
 
-        // Add variables to track sustained silence
         let silenceCounter = 0;
-        const MAX_SILENCE_COUNT = 5; // 5 intervals of silence before considering audio ended
+        const MAX_SILENCE_COUNT = 5;
 
-        // Clear previous interval if it exists
         if (volumeIntervalRef.current) {
           clearInterval(volumeIntervalRef.current);
         }
@@ -506,70 +444,49 @@ export default function useWebRTCAudioSession(
         volumeIntervalRef.current = window.setInterval(() => {
           const volume = getVolume();
 
-          // Only update if audio element exists
           if (!audioEl) return;
 
           if (audioEl.paused) {
-            // If audio element is explicitly paused, immediately set volume to 0
             if (currentVolume > 0) {
-              console.log("🔇 Audio element is paused, clearing volume");
               setCurrentVolume(0);
               setIsAudioPlaying(false);
               silenceCounter = 0;
             }
           } else {
-            // Audio element is not paused, but check if it's actually playing audio
             if (volume < 0.008) {
-              // Very low volume might indicate silent passage or end of audio
               silenceCounter++;
 
               if (silenceCounter >= MAX_SILENCE_COUNT) {
-                // Sustained silence detected, audio might have ended
-                console.log(
-                  "🔇 Sustained silence detected, considering audio ended"
-                );
                 setCurrentVolume(0);
                 setIsAudioPlaying(false);
               } else {
-                // Reduce volume but keep some minimal level during short silences
                 setCurrentVolume((prev) => Math.max(0.1, prev * 0.9));
               }
             } else {
-              // Normal audio playing with audible volume
-              silenceCounter = 0; // Reset silence counter when audio is detected
-              const scaledVolume = Math.max(volume * 2, 0.2); // Amplify for better visualization
+              silenceCounter = 0;
+              const scaledVolume = Math.max(volume * 2, 0.2);
               setCurrentVolume(scaledVolume);
-              // Ensure we mark audio as playing when we detect actual audio
               setIsAudioPlaying(true);
             }
           }
         }, 100);
       };
 
-      // Data channel for transcripts
       const dataChannel = pc.createDataChannel("response");
       dataChannelRef.current = dataChannel;
-      console.log("📊 Created data channel");
 
       dataChannel.onopen = () => {
-        console.log("📬 Data channel open");
         configureDataChannel(dataChannel);
       };
       dataChannel.onmessage = handleDataChannelMessage;
 
-      // Add local (mic) track
       pc.addTrack(stream.getTracks()[0]);
-      console.log("📤 Added local microphone track to peer connection");
 
-      // Create offer & set local description
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      console.log("📝 Created and set local SDP offer");
 
-      // Send SDP offer to OpenAI Realtime
       const baseUrl = "https://api.openai.com/v1/realtime";
-      const model = "gpt-4o-realtime-preview-2024-12-17";
-      console.log(`📩 Sending SDP offer to ${baseUrl} for model ${model}`);
+      const model = "gpt-4o-mini-realtime-preview";
       const response = await fetch(`${baseUrl}?model=${model}&voice=${voice}`, {
         method: "POST",
         body: offer.sdp,
@@ -585,18 +502,26 @@ export default function useWebRTCAudioSession(
         );
       }
 
-      // Set remote description
       const answerSdp = await response.text();
-      console.log("📨 Received SDP answer from server");
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-      console.log("✅ Set remote SDP description");
 
       setIsSessionActive(true);
       setStatus("Session established successfully!");
-      console.log("🎉 WebRTC session established successfully");
-    } catch (err) {
-      console.error("❌ startSession error:", err);
-      setStatus(`Error: ${err}`);
+    } catch (err: any) {
+      console.error("startSession error:", err);
+
+      // Provide more specific error messages based on error type
+      if (err instanceof TypeError && err.message.includes("fetch")) {
+        setStatus(
+          "Error: Network connection issue. Please check your internet connection."
+        );
+      } else if (err.message && err.message.includes("Server returned")) {
+        setStatus(`Error: Server connection failed. ${err.message}`);
+      } else {
+        setStatus(`Error: ${err.message || "Unknown error occurred"}`);
+      }
+
+      // Clean up any partial connection
       stopSession();
     }
   }
@@ -605,39 +530,31 @@ export default function useWebRTCAudioSession(
    * Stop the session & cleanup
    */
   function stopSession() {
-    console.log("🛑 Stopping WebRTC session...");
-
     if (dataChannelRef.current) {
-      console.log("📝 Closing data channel");
       dataChannelRef.current.close();
       dataChannelRef.current = null;
     }
 
     if (peerConnectionRef.current) {
-      console.log("🔌 Closing peer connection");
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
     if (audioContextRef.current) {
-      console.log("🔇 Closing audio context");
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
 
     if (audioStreamRef.current) {
-      console.log("🎤 Stopping microphone tracks");
       audioStreamRef.current.getTracks().forEach((track) => track.stop());
       audioStreamRef.current = null;
     }
 
     if (audioIndicatorRef.current) {
-      console.log("📊 Resetting audio indicator");
       audioIndicatorRef.current.classList.remove("active");
     }
 
     if (volumeIntervalRef.current) {
-      console.log("⏱️ Clearing volume interval");
       clearInterval(volumeIntervalRef.current);
       volumeIntervalRef.current = null;
     }
@@ -650,7 +567,29 @@ export default function useWebRTCAudioSession(
     setStatus("Session stopped");
     setMsgs([]);
     setConversation([]);
-    console.log("✅ Session cleanup complete");
+  }
+
+  /**
+   * Check if microphone is available
+   */
+  async function checkMicrophoneAvailability(): Promise<boolean> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputDevices = devices.filter(
+        (device) => device.kind === "audioinput"
+      );
+
+      if (audioInputDevices.length === 0) {
+        setStatus("Error: No microphone detected on your device.");
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error checking audio devices:", error);
+      setStatus("Error: Could not access audio devices.");
+      return false;
+    }
   }
 
   /**
@@ -658,12 +597,15 @@ export default function useWebRTCAudioSession(
    */
   function handleStartStopClick() {
     if (isSessionActive) {
-      console.log("⏹️ Stopping active session...");
       stopSession();
     } else {
-      console.log("▶️ Starting new session...");
-      setStatus("Initializing session...");
-      startSession();
+      setStatus("Checking microphone availability...");
+      checkMicrophoneAvailability().then((available) => {
+        if (available) {
+          setStatus("Initializing session...");
+          startSession();
+        }
+      });
     }
   }
 
@@ -681,7 +623,6 @@ export default function useWebRTCAudioSession(
 
     const messageId = uuidv4();
 
-    // Add message to conversation immediately
     const newMessage: Conversation = {
       id: messageId,
       role: "user",
@@ -693,7 +634,6 @@ export default function useWebRTCAudioSession(
 
     setConversation((prev) => [...prev, newMessage]);
 
-    // Send message through data channel
     const message = {
       type: "conversation.item.create",
       item: {
@@ -719,7 +659,6 @@ export default function useWebRTCAudioSession(
   // Cleanup on unmount
   useEffect(() => {
     return () => stopSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

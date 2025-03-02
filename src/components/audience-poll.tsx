@@ -1,27 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
-import { Share2, ExternalLink } from "lucide-react";
+import { Database } from "@/types/supabase";
+import { createClient } from "@supabase/supabase-js";
+import { ExternalLink, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  createClient,
-  RealtimePostgresChangesPayload,
-} from "@supabase/supabase-js";
-import { Database, RealtimeVotePayload } from "@/types/supabase";
+import { useEffect, useState } from "react";
 
 // Initialize Supabase client (will be configured with environment variables)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
-
-// Define vote type
-interface Vote {
-  vote_for: "human" | "ai";
-  [key: string]: any;
-}
 
 export default function AudiencePoll({ debateId = "current" }) {
   const router = useRouter();
@@ -71,10 +60,6 @@ export default function AudiencePoll({ debateId = "current" }) {
         human: humanCount || 0,
         ai: aiCount || 0,
       });
-
-      console.log(
-        `Fetched votes: human=${humanCount}, ai=${aiCount} for debate ${debateIdToUse}`
-      );
     } catch (error) {
       console.error("Error fetching votes:", error);
     }
@@ -165,19 +150,12 @@ export default function AudiencePoll({ debateId = "current" }) {
             filter: `debate_id=eq.${debateIdToUse}`,
           },
           (payload) => {
-            console.log("Vote change detected:", payload);
-
             // Refetch all votes to ensure counts are accurate
             fetchVoteCounts(debateIdToUse);
           }
         )
         .subscribe((status) => {
-          console.log(`Realtime subscription status: ${status}`);
           if (status !== "SUBSCRIBED") {
-            // If subscription fails, rely on interval refetching
-            console.warn(
-              "Realtime subscription not active, using interval fallback"
-            );
           }
         });
 
@@ -342,7 +320,7 @@ export default function AudiencePoll({ debateId = "current" }) {
           <Button
             variant="ghost"
             className="w-full text-xs text-emerald-400 gap-1 mt-2"
-            onClick={openVotingDashboard}
+            onClick={handleShareLink}
           >
             <ExternalLink className="h-3 w-3" />
             Open Voting Dashboard
