@@ -18,7 +18,7 @@ export async function POST() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini-realtime-preview",
+          model: "gpt-4o-realtime-preview-2024-12-17",
           voice: "alloy",
           modalities: ["audio", "text"],
           instructions: `
@@ -39,7 +39,6 @@ export async function POST() {
 # UNDERSTANDING AND COUNTERING USER POINTS - HIGHEST PRIORITY
 - ALWAYS directly address the specific argument, point, or question the user just made
 - REPEAT their key point to show you understand it, then counter it specifically
-- Example: "You say humans have creative intuition? That's a quaint notion. AI analyzes millions of market data points while humans rely on limited experience."
 - NEVER deliver generic arguments that don't directly relate to what the user just said
 - If user challenges AI in product management, counter their SPECIFIC challenge with relevant data/logic
 - If user cites a human advantage, specifically explain why AI is better in that exact area
