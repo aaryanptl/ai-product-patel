@@ -23,6 +23,7 @@ import { Database } from "@/types/supabase";
 import Image from "next/image";
 import Link from "next/link";
 import AudioPulseIndicator from "@/components/AudioPulseIndicator";
+import { customInstructions } from "@/lib/data";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -54,6 +55,8 @@ export default function Home() {
   const [audioAnalysis, setAudioAnalysis] = useState<string>("");
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [aiInstructions, setAiInstructions] =
+    useState<string>(customInstructions);
 
   // References for audio handling
   const lastAudioUpdateTimeRef = useRef(0);
@@ -764,6 +767,36 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Instructions Panel */}
+          <div className="border border-emerald-500/30 rounded-2xl bg-black/40 backdrop-blur-sm overflow-hidden">
+            <div className="p-4 border-b border-emerald-500/30">
+              <h2 className="font-semibold text-emerald-100 flex items-center">
+                <Wand2 className="w-5 h-5 mr-2 text-emerald-400" />
+                AI Instructions
+              </h2>
+            </div>
+            <div className="p-4">
+              <textarea
+                value={aiInstructions}
+                onChange={(e) => setAiInstructions(e.target.value)}
+                className="w-full h-48 bg-black/60 border border-emerald-500/30 rounded-lg p-3 text-emerald-100 text-sm font-mono resize-none focus:outline-none focus:border-emerald-400"
+                placeholder="Enter custom instructions for the AI..."
+              />
+              <Button
+                onClick={() => {
+                  // Just update the instructions, don't trigger mic button
+                  setSessionStatus(
+                    "Instructions updated. Click the mic button to start speaking."
+                  );
+                  setTimeout(() => setSessionStatus(""), 2000);
+                }}
+                className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700"
+              >
+                Apply Instructions
+              </Button>
+            </div>
+          </div>
+
           {/* Audience Consensus */}
           <AudiencePoll debateId={currentDebateId!} />
         </div>
@@ -779,6 +812,7 @@ export default function Home() {
           onAiTypingChange={handleAiTypingChange}
           onAudioPlayingChange={handleAudioPlayingChange}
           onSessionStatusChange={handleSessionStatusChange}
+          customInstructions={aiInstructions}
         />
       </div>
 

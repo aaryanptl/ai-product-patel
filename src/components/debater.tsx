@@ -14,6 +14,7 @@ interface DebaterProps {
   onAiTypingChange?: (isTyping: boolean) => void;
   onAudioPlayingChange?: (isPlaying: boolean) => void;
   onSessionStatusChange?: (status: string) => void;
+  customInstructions?: string;
 }
 
 export default function Debater({
@@ -24,6 +25,7 @@ export default function Debater({
   onAiTypingChange,
   onAudioPlayingChange,
   onSessionStatusChange,
+  customInstructions,
 }: DebaterProps) {
   const [voice, setVoice] = useState("alloy");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -44,7 +46,7 @@ export default function Debater({
     [onSessionStatusChange]
   );
 
-  // Use our WebRTC hook
+  // Use our WebRTC hook with custom instructions
   const {
     status,
     isSessionActive,
@@ -54,7 +56,30 @@ export default function Debater({
     currentVolume,
     sendTextMessage,
     isAudioPlaying,
-  } = useWebRTCAudioSession(voice, undefined, handleStatusChange);
+  } = useWebRTCAudioSession(
+    voice,
+    undefined,
+    handleStatusChange,
+    customInstructions
+  );
+
+  // Keep track of previous instructions to detect changes
+  const prevInstructionsRef = useRef<string>("");
+
+  // Effect to handle custom instructions changes
+  useEffect(() => {
+    // Only stop the session if instructions have changed and are not empty
+    const currentInstructions = customInstructions || "";
+    if (
+      currentInstructions !== prevInstructionsRef.current &&
+      currentInstructions.trim() !== ""
+    ) {
+      prevInstructionsRef.current = currentInstructions;
+      if (isSessionActive) {
+        handleStartStopClick();
+      }
+    }
+  }, [customInstructions, isSessionActive, handleStartStopClick]);
 
   // When the conversation updates, process the messages
   useEffect(() => {

@@ -36,7 +36,8 @@ interface UseWebRTCAudioSessionReturn {
 export default function useWebRTCAudioSession(
   voice: string,
   tools?: Tool[],
-  onStatusChange?: (status: string) => void
+  onStatusChange?: (status: string) => void,
+  customInstructions?: string
 ): UseWebRTCAudioSessionReturn {
   // Connection/session states
   const [status, setStatus] = useState("");
@@ -332,11 +333,14 @@ export default function useWebRTCAudioSession(
   /**
    * Fetch ephemeral token from your Next.js endpoint
    */
-  async function getEphemeralToken() {
+  async function getEphemeralToken(instructions?: string) {
     try {
       const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instructions: instructions || customInstructions,
+        }),
       });
       if (!response.ok) {
         throw new Error(`Failed to get ephemeral token: ${response.status}`);
@@ -400,7 +404,7 @@ export default function useWebRTCAudioSession(
       audioStreamRef.current = stream;
 
       setStatus("Fetching ephemeral token...");
-      const ephemeralToken = await getEphemeralToken();
+      const ephemeralToken = await getEphemeralToken(customInstructions);
 
       setStatus("Establishing connection...");
       const pc = new RTCPeerConnection();
