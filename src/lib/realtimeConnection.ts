@@ -68,7 +68,7 @@ export async function createRealtimeConnection(
 
   // Connect to OpenAI's Realtime API with the current endpoint
   const baseUrl = "https://api.openai.com/v1/realtime";
-  const model = "gpt-4o-realtime-preview-2024-12-17";
+  const model = "gpt-4o-mini-realtime-preview";
   const voice = "alloy"; // Default voice
 
   console.log("Connecting to OpenAI realtime API...");
