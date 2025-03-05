@@ -109,17 +109,17 @@ body {
   background-size: 50px 50px;
   background-image: linear-gradient(
       to right,
-      rgba(255, 255, 255, 0.05) 1px,
+      rgba(61, 158, 152, 0.1) 1px,
       transparent 1px
     ),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    linear-gradient(to bottom, rgba(61, 158, 152, 0.1) 1px, transparent 1px);
 }
 
 .dark .grid-background {
   background-image: linear-gradient(
       to right,
-      rgba(255, 255, 255, 0.05) 1px,
+      rgba(61, 158, 152, 0.1) 1px,
       transparent 1px
     ),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    linear-gradient(to bottom, rgba(61, 158, 152, 0.1) 1px, transparent 1px);
 }

@@ -16,7 +16,7 @@ export default function Header() {
     <header className="relative z-10 pt-8 pb-4 text-center items-center">
       <Link href="https://buildfastwithai.com">
         <Image
-          src="/logo.svg"
+          src="/dark.svg"
           alt="Build Fast with AI"
           width={70}
           height={70}
@@ -27,7 +27,7 @@ export default function Header() {
         <Zap className="w-8 h-8 text-emerald-400" />
         <h1
           className={cn(
-            "text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400",
+            "text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500",
             spaceGrotesk.className
           )}
         >

@@ -1,23 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Message } from "ai";
 import Debater from "@/components/debater";
-import AudiencePoll from "@/components/audience-poll";
+import { Message } from "ai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // Import new components
-import Header from "@/components/Layout/Header";
-import Footer from "@/components/Layout/Footer";
-import Background from "@/components/Layout/Background";
 import AISpeakerDisplay from "@/components/AISpeakerDisplay";
 import DebateTranscript from "@/components/DebateTranscript";
+import Footer from "@/components/Layout/Footer";
+import Header from "@/components/Layout/Header";
 
 // Import custom hooks
-import useAudioAnimation from "@/hooks/useAudioAnimation";
 import useDebateInitialization from "@/hooks/useDebateInitialization";
 import useDebateSummary from "@/hooks/useDebateSummary";
-import AudioController from "@/components/AudioController";
-import BeamsBackground from "@/components/background-beams";
 
 export default function Home() {
   // State
@@ -30,20 +25,11 @@ export default function Home() {
   const [aiIsTyping, setAiIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<string>("");
-  const [recentUserAudio, setRecentUserAudio] = useState<string>("");
-  const [recentAIAudio, setRecentAIAudio] = useState<string>("");
-  const [audioAnalysis, setAudioAnalysis] = useState<string>("");
-  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
 
   // Custom hooks
   const { currentDebateId, isDebateLoading } = useDebateInitialization();
-  const { brainActivity } = useAudioAnimation({
-    isAudioPlaying,
-    isListening,
-  });
   const { debateSummary, isLoadingSummary, isTransitioning, fetchSummary } =
     useDebateSummary({
       transcript,
@@ -115,7 +101,6 @@ export default function Home() {
       const resetAnimations = () => {
         console.log("🛑 [Reset] Stopping all animations");
         setIsAudioPlaying(false);
-        setIsPlaying(false);
         setAudioData(undefined);
         setAudioLevel(0);
       };
@@ -196,58 +181,6 @@ export default function Home() {
     handleTranscriptReceivedRef.current = handleTranscriptReceived;
   }, [handleTranscriptReceived]);
 
-  // Effect to fetch audio analysis when new audio is available
-  useEffect(() => {
-    const fetchAudioAnalysis = async () => {
-      // Only proceed if we have at least one audio source and at least 2 messages
-      if ((!recentUserAudio && !recentAIAudio) || transcript.length < 2) return;
-
-      // Check if the last message is from AI (meaning an exchange just completed)
-      const lastMessage = transcript[transcript.length - 1];
-      if (lastMessage.speaker !== "AI") return;
-
-      // Don't update while audio is still playing
-      if (isAudioPlaying) return;
-
-      // Add a small delay after audio stops to ensure everything is processed
-      const timeoutId = setTimeout(() => {
-        setIsLoadingAnalysis(true);
-        try {
-          fetch("/api/audio-analysis", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userAudio: recentUserAudio,
-              aiAudio: recentAIAudio,
-              transcript: transcript.slice(-4), // Send recent transcript for context
-            }),
-          })
-            .then((response) => {
-              if (!response.ok) throw new Error("Failed to analyze audio");
-              return response.json();
-            })
-            .then((data) => {
-              setAudioAnalysis(data.analysis);
-              setIsLoadingAnalysis(false);
-            })
-            .catch((error) => {
-              console.error("Error analyzing audio:", error);
-              setIsLoadingAnalysis(false);
-            });
-        } catch (error) {
-          console.error("Error initiating audio analysis:", error);
-          setIsLoadingAnalysis(false);
-        }
-      }, 1500); // 1.5 second delay after audio stops playing
-
-      return () => clearTimeout(timeoutId);
-    };
-
-    fetchAudioAnalysis();
-  }, [recentUserAudio, recentAIAudio, transcript, isAudioPlaying]);
-
   // Handle AI typing state changes
   const handleAiTypingChange = useCallback((isTyping: boolean) => {
     setAiIsTyping(isTyping);
@@ -302,14 +235,14 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="text-white flex flex-col">
+    <div className="bg-[#f3f4f6] flex flex-col h-screen">
       {/* Grid Pattern Background */}
       <div className="grid-background"></div>
 
       {/* Header */}
       <Header />
 
-      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 max-w-4xl w-full mx-auto">
+      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 max-w-7xl w-full mx-auto">
         {/* Main AI visualization */}
         <AISpeakerDisplay
           isAudioPlaying={isAudioPlaying}
@@ -318,24 +251,23 @@ export default function Home() {
           isProcessing={isProcessing}
           audioLevel={audioLevel}
           sessionStatus={sessionStatus}
-          brainActivity={brainActivity}
           handleMicButtonClick={handleMicButtonClick}
           currentDebateId={currentDebateId}
         />
 
         {/* Right sidebar */}
-      </div>
-      <div className="md:w-96 mx-auto space-y-6">
-        {/* Neural Analysis Panel */}
-        <DebateTranscript
-          transcript={transcript}
-          debateSummary={debateSummary}
-          isLoadingSummary={isLoadingSummary}
-          isTransitioning={isTransitioning}
-          isAudioPlaying={isAudioPlaying}
-          fetchSummary={fetchSummary}
-          setSessionStatus={setSessionStatus}
-        />
+        <div className="w-full max-w-[20rem] mx-auto space-y-6 h-full">
+          {/* Neural Analysis Panel */}
+          <DebateTranscript
+            transcript={transcript}
+            debateSummary={debateSummary}
+            isLoadingSummary={isLoadingSummary}
+            isTransitioning={isTransitioning}
+            isAudioPlaying={isAudioPlaying}
+            fetchSummary={fetchSummary}
+            setSessionStatus={setSessionStatus}
+          />
+        </div>
       </div>
 
       {/* Hidden Debater Component */}
