@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Message } from "ai";
 import Debater from "@/components/debater";
 import AudiencePoll from "@/components/audience-poll";
@@ -17,6 +17,7 @@ import useAudioAnimation from "@/hooks/useAudioAnimation";
 import useDebateInitialization from "@/hooks/useDebateInitialization";
 import useDebateSummary from "@/hooks/useDebateSummary";
 import AudioController from "@/components/AudioController";
+import BeamsBackground from "@/components/background-beams";
 
 export default function Home() {
   // State
@@ -35,10 +36,11 @@ export default function Home() {
   const [recentAIAudio, setRecentAIAudio] = useState<string>("");
   const [audioAnalysis, setAudioAnalysis] = useState<string>("");
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
 
   // Custom hooks
   const { currentDebateId, isDebateLoading } = useDebateInitialization();
-  const { audioLevel, brainActivity } = useAudioAnimation({
+  const { brainActivity } = useAudioAnimation({
     isAudioPlaying,
     isListening,
   });
@@ -49,35 +51,79 @@ export default function Home() {
       isAudioPlaying,
     });
 
-  // Get the audio controller methods
-  const audioController = AudioController({
-    isListening,
-    isAudioPlaying,
-    setRecentUserAudio,
-    setRecentAIAudio,
-  });
+  // Create a ref for handleTranscriptReceived function
+  const handleTranscriptReceivedRef = useRef<
+    ((text: string, speaker: "AI" | "Human") => void) | null
+  >(null);
+
+  // Audio controller with direct reference to the current handleTranscriptReceived function
+  const audioController = useMemo(() => {
+    return {
+      handleAudioResponse: (audioBlob: Blob) => {
+        if (audioBlob.size === 0) {
+          // Reset audio data when we get an empty blob
+          setAudioData(undefined);
+          setAudioLevel(0);
+          return;
+        }
+
+        // Read the blob as an array buffer
+        const reader = new FileReader();
+        reader.onload = () => {
+          const arrayBuffer = reader.result as ArrayBuffer;
+          if (arrayBuffer) {
+            const uint8Array = new Uint8Array(arrayBuffer);
+
+            // Calculate audio level (average volume)
+            let sum = 0;
+            for (let i = 0; i < uint8Array.length; i++) {
+              sum += uint8Array[i];
+            }
+            const avgLevel = sum / uint8Array.length / 255; // Normalize to 0-1
+
+            // Update audio level with some smoothing
+            setAudioLevel((prev: number) => prev * 0.3 + avgLevel * 0.7);
+
+            // Set the audio data for visualization
+            setAudioData(uint8Array);
+          }
+        };
+        reader.readAsArrayBuffer(audioBlob);
+      },
+
+      // Include this to handle references to this method
+      handleTranscriptReceived: (text: string, speaker: "AI" | "Human") => {
+        if (handleTranscriptReceivedRef.current) {
+          handleTranscriptReceivedRef.current(text, speaker);
+        }
+      },
+    };
+  }, []);
 
   // Handle mic button click
   const handleMicButtonClick = useCallback(() => {
-    if (isDebateLoading || !currentDebateId || isProcessing) return;
+    if (isDebateLoading || !currentDebateId) return;
+
+    if (isProcessing) {
+      console.log("⏳ Cannot toggle mic while processing...");
+      return;
+    }
 
     // Stop all audio animations when toggling off the microphone
     if (isListening) {
-      // Immediately stop all audio animations
-      setIsAudioPlaying(false);
-      setIsPlaying(false);
-      setAudioData(undefined);
-
-      // Make sure any ongoing effects are cleared
+      // Define a more thorough reset function
       const resetAnimations = () => {
+        console.log("🛑 [Reset] Stopping all animations");
         setIsAudioPlaying(false);
         setIsPlaying(false);
         setAudioData(undefined);
+        setAudioLevel(0);
       };
 
-      // Double cleanup with small delay to ensure everything is reset
+      // Execute reset immediately and with a delay to ensure it completes
       resetAnimations();
       setTimeout(resetAnimations, 50);
+      setTimeout(resetAnimations, 200); // One more with longer timeout for safety
     }
 
     setIsListening(!isListening);
@@ -92,8 +138,6 @@ export default function Home() {
   const handleTranscriptReceived = useCallback(
     (text: string, speaker: "AI" | "Human") => {
       if (!text.trim()) return;
-
-      audioController.handleTranscriptReceived(text, speaker);
 
       // Add to transcript with timestamp for ordering and duplicate detection
       setTranscript((prev) => {
@@ -144,8 +188,13 @@ export default function Home() {
         return [...prev, newMessage];
       });
     },
-    [audioController]
+    []
   );
+
+  // Keep the ref updated with the latest callback
+  useEffect(() => {
+    handleTranscriptReceivedRef.current = handleTranscriptReceived;
+  }, [handleTranscriptReceived]);
 
   // Effect to fetch audio analysis when new audio is available
   useEffect(() => {
@@ -204,6 +253,14 @@ export default function Home() {
     setAiIsTyping(isTyping);
   }, []);
 
+  // Add handler for processing state changes
+  const handleProcessingChange = useCallback((processing: boolean) => {
+    console.log(
+      `🔄 [Page] Processing state changed to: ${processing ? "ON" : "OFF"}`
+    );
+    setIsProcessing(processing);
+  }, []);
+
   // Add handler for audio playing state changes
   const handleAudioPlayingChange = useCallback(
     (isPlaying: boolean) => {
@@ -213,23 +270,29 @@ export default function Home() {
         }`
       );
 
-      // Only update audio playing state if we're still listening
-      if (isListening) {
-        // Immediately update the playing state so UI can react
-        setIsAudioPlaying(isPlaying);
-      }
-      // When audio stops playing or not listening, ensure we clean up immediately
-      else {
+      // Always update the audio playing state immediately
+      setIsAudioPlaying(isPlaying);
+
+      // Update related UI states based on audio playing
+      if (isPlaying) {
+        // When audio starts playing, make sure we have some data for visualization
+        if (!audioData) {
+          // Create dummy data for visualization when starting
+          const dummyData = new Uint8Array(128);
+          for (let i = 0; i < dummyData.length; i++) {
+            dummyData[i] = Math.floor(Math.random() * 128);
+          }
+          setAudioData(dummyData);
+        }
+      } else if (!isListening) {
+        // Only reset audio data when audio stops and we're not listening
         console.log(
-          "🔄 [Page] Audio stopped or not listening, resetting audio data"
+          "🔄 [Page] Audio stopped and not listening, resetting audio data"
         );
-        // Reset audio data immediately for UI
-        setIsAudioPlaying(false);
         setAudioData(undefined);
-        setIsPlaying(false);
       }
     },
-    [isListening]
+    [isListening, audioData]
   );
 
   // New handler for session status changes
@@ -239,14 +302,14 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
-      {/* Animated background */}
-      <Background />
+    <div className="text-white flex flex-col">
+      {/* Grid Pattern Background */}
+      <div className="grid-background"></div>
 
       {/* Header */}
       <Header />
 
-      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 container w-full mx-auto">
+      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 max-w-4xl w-full mx-auto">
         {/* Main AI visualization */}
         <AISpeakerDisplay
           isAudioPlaying={isAudioPlaying}
@@ -261,21 +324,18 @@ export default function Home() {
         />
 
         {/* Right sidebar */}
-        <div className="md:w-96 space-y-6">
-          {/* Neural Analysis Panel */}
-          <DebateTranscript
-            transcript={transcript}
-            debateSummary={debateSummary}
-            isLoadingSummary={isLoadingSummary}
-            isTransitioning={isTransitioning}
-            isAudioPlaying={isAudioPlaying}
-            fetchSummary={fetchSummary}
-            setSessionStatus={setSessionStatus}
-          />
-
-          {/* Audience Consensus */}
-          <AudiencePoll debateId={currentDebateId!} />
-        </div>
+      </div>
+      <div className="md:w-96 mx-auto space-y-6">
+        {/* Neural Analysis Panel */}
+        <DebateTranscript
+          transcript={transcript}
+          debateSummary={debateSummary}
+          isLoadingSummary={isLoadingSummary}
+          isTransitioning={isTransitioning}
+          isAudioPlaying={isAudioPlaying}
+          fetchSummary={fetchSummary}
+          setSessionStatus={setSessionStatus}
+        />
       </div>
 
       {/* Hidden Debater Component */}
@@ -284,7 +344,7 @@ export default function Home() {
           onTranscriptReceived={handleTranscriptReceived}
           onAudioResponse={audioController.handleAudioResponse}
           messages={messages}
-          onProcessingChange={setIsProcessing}
+          onProcessingChange={handleProcessingChange}
           onAiTypingChange={handleAiTypingChange}
           onAudioPlayingChange={handleAudioPlayingChange}
           onSessionStatusChange={handleSessionStatusChange}

@@ -240,6 +240,10 @@ export default function useWebRTCAudioSession(
          * Streaming AI transcripts (assistant partial)
          */
         case "response.audio_transcript.delta": {
+          // When we get a transcript delta, the AI is definitely speaking
+          // so make sure isAudioPlaying is true
+          setIsAudioPlaying(true);
+
           const newMessage: Conversation = {
             id: uuidv4(),
             role: "assistant",
@@ -268,24 +272,35 @@ export default function useWebRTCAudioSession(
          * Audio playback actually started
          */
         case "output_audio_buffer.started": {
+          console.log("🔊 [WebRTC] Audio playback started");
           setIsAudioPlaying(true);
           setCurrentVolume(0.8);
           break;
         }
 
         case "output_audio_buffer.stopped": {
+          console.log("🔇 [WebRTC] Audio playback stopped");
           setCurrentVolume(0);
           setIsAudioPlaying(false);
           break;
         }
 
+        /**
+         * AI transcript completion
+         */
         case "response.audio_transcript.done": {
+          console.log("📝 [WebRTC] AI transcript complete");
           setConversation((prev) => {
             if (prev.length === 0) return prev;
             const updated = [...prev];
             updated[updated.length - 1].isFinal = true;
             return updated;
           });
+
+          // Ensure audio is marked as not playing when transcript is done
+          setTimeout(() => {
+            setIsAudioPlaying(false);
+          }, 500);
           break;
         }
 
@@ -527,46 +542,71 @@ export default function useWebRTCAudioSession(
   }
 
   /**
-   * Stop the session & cleanup
+   * Stop the session and clean up resources
    */
   function stopSession() {
-    if (dataChannelRef.current) {
-      dataChannelRef.current.close();
-      dataChannelRef.current = null;
-    }
+    setStatus("Disconnected");
+    if (onStatusChange) onStatusChange("Disconnected");
 
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach((track) => track.stop());
-      audioStreamRef.current = null;
-    }
-
-    if (audioIndicatorRef.current) {
-      audioIndicatorRef.current.classList.remove("active");
-    }
-
-    if (volumeIntervalRef.current) {
-      clearInterval(volumeIntervalRef.current);
-      volumeIntervalRef.current = null;
-    }
-
-    analyserRef.current = null;
-    ephemeralUserMessageIdRef.current = null;
-
+    // Immediately reset audio playing state
+    setIsAudioPlaying(false);
     setCurrentVolume(0);
-    setIsSessionActive(false);
-    setStatus("Session stopped");
-    setMsgs([]);
-    setConversation([]);
+
+    try {
+      // Clean up event listeners
+      if (dataChannelRef.current) {
+        dataChannelRef.current.removeEventListener(
+          "message",
+          handleDataChannelMessage
+        );
+        dataChannelRef.current.close();
+        dataChannelRef.current = null;
+      }
+
+      // Close audio tracks
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+        });
+        audioStreamRef.current = null;
+      }
+
+      // Close the connection
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+
+      // Close audio context
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+
+      // Remove active class from indicator
+      if (audioIndicatorRef.current) {
+        audioIndicatorRef.current.classList.remove("active");
+      }
+
+      // Clear volume interval
+      if (volumeIntervalRef.current) {
+        clearInterval(volumeIntervalRef.current);
+        volumeIntervalRef.current = null;
+      }
+
+      // Reset other refs
+      analyserRef.current = null;
+      ephemeralUserMessageIdRef.current = null;
+
+      // Reset state
+      setIsSessionActive(false);
+      setMsgs([]);
+      setConversation([]);
+
+      console.log("Session successfully closed");
+    } catch (err) {
+      console.error("Error closing session:", err);
+    }
   }
 
   /**
