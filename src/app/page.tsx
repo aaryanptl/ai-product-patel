@@ -496,7 +496,7 @@ export default function Home() {
           <Zap className="w-8 h-8 text-emerald-400" />
         </div>
         <p className="text-emerald-400/80 text-lg tracking-widest uppercase">
-          The AI Product Manager at Build Fast with AI
+          AI vs Human Roast Debate
         </p>
       </header>
 
