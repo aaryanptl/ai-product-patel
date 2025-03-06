@@ -56,7 +56,7 @@ export default function AISpeakerDisplay({
 
   return (
     <div
-      className={`w-full rounded-2xl grid p-16 shadow-lg transition-all duration-300 ${
+      className={`w-full rounded-2xl grid p-10 shadow-lg transition-all duration-300 ${
         isDarkMode
           ? "bg-gray-800 shadow-emerald-900/20"
           : "bg-white shadow-gray-200/60"
