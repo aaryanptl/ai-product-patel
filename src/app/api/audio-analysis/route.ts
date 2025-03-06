@@ -1,70 +1,81 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI, Part } from "@google/generative-ai";
-
-const googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
-    const { userAudio, aiAudio, transcript } = await req.json();
+    const { userAudio } = await req.json();
 
-    if (!userAudio && !aiAudio) {
+    if (!userAudio) {
       return NextResponse.json(
-        { error: "No audio data provided" },
+        { error: "No user audio data provided" },
         { status: 400 }
       );
     }
 
-    const model = googleAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const parts: Part[] = [];
-
-    // Add transcript context if available
-    if (transcript && transcript.length > 0) {
-      const recentTranscript = transcript.slice(-4); // Get last 4 entries (2 pairs max)
-      const formattedTranscript = recentTranscript
-        .map((item: any) => `${item.speaker}: ${item.text}`)
-        .join("\n");
-
-      parts.push({
-        text: `Here is the recent transcript of the conversation:\n${formattedTranscript}`,
-      });
+    // Check if the userAudio is already a base64 string
+    // If it starts with "data:" prefix, extract the actual base64 content
+    let base64Data = userAudio;
+    if (userAudio.startsWith("data:")) {
+      const parts = userAudio.split(",");
+      if (parts.length === 2) {
+        base64Data = parts[1];
+      }
     }
 
-    // Add user audio if available
-    if (userAudio) {
-      parts.push({
-        inlineData: {
-          mimeType: "audio/mp3", // Adjust based on actual format
-          data: userAudio,
+    // Decode the base64 audio data
+    const audioBuffer = Buffer.from(base64Data, "base64");
+
+    // Create a Blob from the binary data
+    const audioBlob = new Blob([audioBuffer], { type: "audio/mp3" });
+
+    // Create a File object from the Blob (Groq API handles File objects better)
+    const audioFile = new File([audioBlob], "audio.mp3", { type: "audio/mp3" });
+
+    // Create and populate FormData
+    const formData = new FormData();
+    formData.append("file", audioFile);
+    formData.append("model", "whisper-large-v3-turbo");
+    formData.append("response_format", "json");
+    formData.append("language", "en");
+    formData.append("temperature", "0");
+
+    console.log("Sending request to Groq Whisper API...");
+
+    // Call Groq API
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/audio/transcriptions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
         },
-      });
-      parts.push({ text: "Above is the most recent human speech." });
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        `Groq Whisper API error: ${
+          errorData.error?.message || response.statusText
+        }`
+      );
     }
 
-    // Add AI audio if available
-    if (aiAudio) {
-      parts.push({
-        inlineData: {
-          mimeType: "audio/mp3", // Adjust based on actual format
-          data: aiAudio,
-        },
-      });
-      parts.push({ text: "Above is the most recent AI response." });
-    }
+    const data = await response.json();
+    console.log("Groq Whisper transcription successful:", { text: data.text });
+    const transcription = data.text;
 
-    // Add the analysis prompt
-    parts.push({
-      text: "Please provide a brief analysis of this conversation exchange. Focus on tone, key points made by both parties, and the overall direction of the discussion. Keep your response concise (2-3 sentences).",
+    return NextResponse.json({
+      transcription,
+      speaker: "Human",
     });
-
-    const result = await model.generateContent(parts);
-    const analysis = result.response.text();
-
-    return NextResponse.json({ analysis });
   } catch (error) {
-    console.error("Error analyzing audio:", error);
+    console.error("Error transcribing audio with Groq Whisper:", error);
     return NextResponse.json(
-      { error: "Failed to analyze audio", details: (error as Error).message },
+      {
+        error: "Failed to transcribe audio with Groq Whisper",
+        details: (error as Error).message,
+      },
       { status: 500 }
     );
   }

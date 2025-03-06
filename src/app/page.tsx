@@ -6,13 +6,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // Import new components
 import AISpeakerDisplay from "@/components/AISpeakerDisplay";
-import DebateTranscript from "@/components/DebateTranscript";
+import ChatConversation from "@/components/ChatConversation";
 import Footer from "@/components/Layout/Footer";
 import Header from "@/components/Layout/Header";
 
 // Import custom hooks
 import useDebateInitialization from "@/hooks/useDebateInitialization";
-import useDebateSummary from "@/hooks/useDebateSummary";
 
 export default function Home() {
   // State
@@ -27,15 +26,11 @@ export default function Home() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<string>("");
   const [audioLevel, setAudioLevel] = useState(0);
+  const [pendingAIMessage, setPendingAIMessage] = useState<string>("");
+  const [recentUserAudio, setRecentUserAudio] = useState<string>("");
 
   // Custom hooks
   const { currentDebateId, isDebateLoading } = useDebateInitialization();
-  const { debateSummary, isLoadingSummary, isTransitioning, fetchSummary } =
-    useDebateSummary({
-      transcript,
-      aiIsTyping,
-      isAudioPlaying,
-    });
 
   // Create a ref for handleTranscriptReceived function
   const handleTranscriptReceivedRef = useRef<
@@ -72,6 +67,12 @@ export default function Home() {
 
             // Set the audio data for visualization
             setAudioData(uint8Array);
+
+            // Convert to base64 for transcription
+            const base64Audio = btoa(
+              String.fromCharCode.apply(null, Array.from(uint8Array))
+            );
+            setRecentUserAudio(base64Audio);
           }
         };
         reader.readAsArrayBuffer(audioBlob);
@@ -124,35 +125,25 @@ export default function Home() {
     (text: string, speaker: "AI" | "Human") => {
       if (!text.trim()) return;
 
-      // Add to transcript with timestamp for ordering and duplicate detection
-      setTranscript((prev) => {
-        // Check for duplicates or very similar messages (AI often repeats with small changes)
-        const isDuplicate = prev.some((item) => {
-          if (item.speaker !== speaker) return false;
+      // For human messages, add them immediately
+      if (speaker === "Human") {
+        setTranscript((prev) => {
+          // Check for exact duplicates
+          const isDuplicate = prev.some(
+            (item) =>
+              item.speaker === "Human" &&
+              item.text === text &&
+              item.timestamp &&
+              Date.now() - item.timestamp < 2000
+          );
 
-          // For AI, check if the message is very similar (fuzzy match)
-          if (speaker === "AI") {
-            // Compare removing spaces and punctuation
-            const normalize = (str: string) =>
-              str.toLowerCase().replace(/[^\w]/g, "");
-            const similarity =
-              normalize(item.text).includes(normalize(text)) ||
-              normalize(text).includes(normalize(item.text));
-
-            // If texts are similar and within 2 seconds, consider it a duplicate
-            return (
-              similarity && item.timestamp && Date.now() - item.timestamp < 2000
-            );
-          }
-
-          // For humans, exact match is enough
-          return item.text === text;
+          if (isDuplicate) return prev;
+          return [...prev, { text, speaker, timestamp: Date.now() }];
         });
-
-        if (isDuplicate) return prev;
-
-        return [...prev, { text, speaker, timestamp: Date.now() }];
-      });
+      } else {
+        // For AI messages, store them until audio is complete
+        setPendingAIMessage(text);
+      }
 
       // Add message to chat history
       const newMessage: Message = {
@@ -175,6 +166,60 @@ export default function Home() {
     },
     []
   );
+
+  // Function to transcribe user audio
+  const transcribeUserAudio = useCallback(
+    async (userAudio: string) => {
+      if (!userAudio) return;
+
+      try {
+        console.log("Sending audio to Groq Whisper for transcription...");
+
+        const response = await fetch("/api/audio-analysis", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userAudio,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.details || "Failed to transcribe audio with Groq Whisper"
+          );
+        }
+
+        const data = await response.json();
+        console.log("Groq Whisper transcription result:", data);
+
+        if (data.transcription && data.speaker) {
+          // Add the transcription to the transcript
+          handleTranscriptReceived(data.transcription, data.speaker);
+          return data.transcription;
+        } else {
+          throw new Error("No transcription returned from Groq Whisper");
+        }
+      } catch (error) {
+        console.error("Error transcribing audio with Groq Whisper:", error);
+        throw error; // Re-throw to allow the calling component to handle it
+      }
+    },
+    [handleTranscriptReceived]
+  );
+
+  // Effect to handle AI message after audio completes
+  useEffect(() => {
+    if (!isAudioPlaying && pendingAIMessage && !aiIsTyping) {
+      setTranscript((prev) => [
+        ...prev,
+        { text: pendingAIMessage, speaker: "AI", timestamp: Date.now() },
+      ]);
+      setPendingAIMessage("");
+    }
+  }, [isAudioPlaying, pendingAIMessage, aiIsTyping]);
 
   // Keep the ref updated with the latest callback
   useEffect(() => {
@@ -242,32 +287,27 @@ export default function Home() {
       {/* Header */}
       <Header />
 
-      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 max-w-7xl w-full mx-auto">
+      <div className="flex-1 relative z-10 flex flex-col md:flex-row gap-6 p-6 max-w-7xl w-full mx-auto min-h-[calc(100vh-20rem)]">
         {/* Main AI visualization */}
-        <AISpeakerDisplay
-          isAudioPlaying={isAudioPlaying}
-          isListening={isListening}
-          isDebateLoading={isDebateLoading}
-          isProcessing={isProcessing}
-          audioLevel={audioLevel}
-          sessionStatus={sessionStatus}
-          handleMicButtonClick={handleMicButtonClick}
-          currentDebateId={currentDebateId}
-        />
-
-        {/* Right sidebar */}
-        <div className="w-full max-w-[20rem] mx-auto space-y-6 h-full">
-          {/* Neural Analysis Panel */}
-          <DebateTranscript
-            transcript={transcript}
-            debateSummary={debateSummary}
-            isLoadingSummary={isLoadingSummary}
-            isTransitioning={isTransitioning}
+        <div className="flex-1">
+          <AISpeakerDisplay
             isAudioPlaying={isAudioPlaying}
-            fetchSummary={fetchSummary}
-            setSessionStatus={setSessionStatus}
+            isListening={isListening}
+            isDebateLoading={isDebateLoading}
+            isProcessing={isProcessing}
+            audioLevel={audioLevel}
+            sessionStatus={""}
+            handleMicButtonClick={handleMicButtonClick}
+            currentDebateId={currentDebateId}
           />
         </div>
+
+        {/* Right sidebar */}
+        <ChatConversation
+          transcript={transcript}
+          userAudio={recentUserAudio}
+          onTranscribe={transcribeUserAudio}
+        />
       </div>
 
       {/* Hidden Debater Component */}
