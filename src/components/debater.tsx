@@ -92,6 +92,8 @@ export default function Debater({
             "🔇 [Audio Status] Sending empty audio data after AI message complete"
           );
           onAudioResponse(new Blob([], { type: "application/octet-stream" }));
+          // Ensure audio playing state is updated
+          onAudioPlayingChange?.(false);
         }, 1000);
       } else {
         // Otherwise, mark that the assistant is responding
@@ -99,6 +101,8 @@ export default function Debater({
         setAssistantIsResponding(true);
         onAiTypingChange?.(true);
         currentAssistantMessageRef.current = latestMessage.text;
+        // Make sure audio playing state is updated when AI starts responding
+        onAudioPlayingChange?.(true);
       }
     }
   }, [conversation, onTranscriptReceived, onAiTypingChange, onAudioResponse]);
@@ -118,12 +122,17 @@ export default function Debater({
     }
 
     const now = Date.now();
-    // Only send visualization updates every 100ms to prevent excessive re-renders
-    if (now - lastVolumeUpdateRef.current < 100) return;
+    // Only send visualization updates every 50ms for more responsive animations
+    if (now - lastVolumeUpdateRef.current < 50) return;
     lastVolumeUpdateRef.current = now;
 
-    // Only send if volume has changed significantly
-    if (Math.abs(currentVolume - lastSentVolumeRef.current) < 0.05) return;
+    // Only send if volume has changed significantly or it's been a while
+    if (
+      Math.abs(currentVolume - lastSentVolumeRef.current) < 0.05 &&
+      now - lastVolumeUpdateRef.current < 200
+    )
+      return;
+
     lastSentVolumeRef.current = currentVolume;
 
     // Create dummy data for visualization based on volume
@@ -186,15 +195,40 @@ export default function Debater({
     }
   }, [isAudioPlaying, onAudioResponse, onAudioPlayingChange]);
 
+  // Force audio playing notification for assistant responses
+  useEffect(() => {
+    if (assistantIsResponding) {
+      console.log("🔈 [Audio Status] Assistant responding - should play audio");
+      onAudioPlayingChange?.(true);
+    }
+  }, [assistantIsResponding, onAudioPlayingChange]);
+
   // Update processing state
   useEffect(() => {
     const isProc =
       status.includes("Requesting") ||
       status.includes("Fetching") ||
-      status.includes("Establishing");
+      status.includes("Establishing") ||
+      assistantIsResponding;
+
+    console.log(`🔄 [Debater] Processing state changed to: ${isProc}`);
     setIsProcessing(isProc);
-    onProcessingChange?.(isProc);
-  }, [status, onProcessingChange]);
+
+    // Always notify parent about processing state changes
+    if (onProcessingChange) {
+      onProcessingChange(isProc);
+    }
+  }, [status, assistantIsResponding, onProcessingChange]);
+
+  // Audio playing state monitoring - add explicit logging
+  useEffect(() => {
+    console.log(`🔊 [Debater] Internal audio playing state: ${isAudioPlaying}`);
+
+    // Make sure we always update the parent
+    if (onAudioPlayingChange) {
+      onAudioPlayingChange(isAudioPlaying);
+    }
+  }, [isAudioPlaying, onAudioPlayingChange]);
 
   // Handle text submission
   const handleSubmitText = (e: React.FormEvent) => {
