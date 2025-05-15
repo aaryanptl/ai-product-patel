@@ -48,11 +48,15 @@ export default function Home() {
           return;
         }
 
-        // Read the blob as an array buffer
+        // Create a new blob with explicit audio type
+        const audioWithType = new Blob([audioBlob], { type: "audio/wav" });
+
+        // Convert to base64 with proper audio format
         const reader = new FileReader();
-        reader.onload = () => {
-          const arrayBuffer = reader.result as ArrayBuffer;
-          if (arrayBuffer) {
+        reader.onloadend = () => {
+          if (reader.result) {
+            // For visualization data
+            const arrayBuffer = reader.result as ArrayBuffer;
             const uint8Array = new Uint8Array(arrayBuffer);
 
             // Calculate audio level (average volume)
@@ -69,13 +73,20 @@ export default function Home() {
             setAudioData(uint8Array);
 
             // Convert to base64 for transcription
-            const base64Audio = btoa(
-              String.fromCharCode.apply(null, Array.from(uint8Array))
-            );
-            setRecentUserAudio(base64Audio);
+            const base64Reader = new FileReader();
+            base64Reader.onloadend = () => {
+              const base64Audio = base64Reader.result as string;
+              console.log("Audio data converted to base64:", {
+                size: base64Audio.length,
+                startsWithData: base64Audio.startsWith("data:"),
+                type: audioWithType.type,
+              });
+              setRecentUserAudio(base64Audio);
+            };
+            base64Reader.readAsDataURL(audioWithType);
           }
         };
-        reader.readAsArrayBuffer(audioBlob);
+        reader.readAsArrayBuffer(audioWithType);
       },
 
       // Include this to handle references to this method

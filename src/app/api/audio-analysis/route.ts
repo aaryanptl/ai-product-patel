@@ -11,24 +11,49 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if the userAudio is already a base64 string
-    // If it starts with "data:" prefix, extract the actual base64 content
-    let base64Data = userAudio;
-    if (userAudio.startsWith("data:")) {
-      const parts = userAudio.split(",");
-      if (parts.length === 2) {
-        base64Data = parts[1];
-      }
+    // Debug log the incoming audio data format
+    console.log("Received audio data format:", {
+      isString: typeof userAudio === "string",
+      length: userAudio.length,
+      startsWithData: userAudio.startsWith("data:"),
+      mimeType: userAudio.split(";")[0].split(":")[1],
+    });
+
+    // Extract the base64 data and validate MIME type
+    if (!userAudio.startsWith("data:audio/")) {
+      return NextResponse.json(
+        { error: "Invalid audio format - must be audio MIME type" },
+        { status: 400 }
+      );
+    }
+
+    // Extract the base64 data
+    const base64Data = userAudio.split("base64,")[1];
+    if (!base64Data) {
+      return NextResponse.json(
+        { error: "Invalid base64 audio data format" },
+        { status: 400 }
+      );
     }
 
     // Decode the base64 audio data
     const audioBuffer = Buffer.from(base64Data, "base64");
+    console.log("Audio buffer size:", audioBuffer.length, "bytes");
+
+    if (audioBuffer.length < 100) {
+      return NextResponse.json(
+        { error: "Audio data too small to be valid" },
+        { status: 400 }
+      );
+    }
 
     // Create a Blob from the binary data
-    const audioBlob = new Blob([audioBuffer], { type: "audio/mp3" });
+    const audioBlob = new Blob([audioBuffer], { type: "audio/wav" });
+    console.log("Created Blob size:", audioBlob.size, "bytes");
 
-    // Create a File object from the Blob (Groq API handles File objects better)
-    const audioFile = new File([audioBlob], "audio.mp3", { type: "audio/mp3" });
+    // Create a File object from the Blob
+    const audioFile = new File([audioBlob], "audio.wav", { type: "audio/wav" });
+    console.log("Created File size:", audioFile.size, "bytes");
 
     // Create and populate FormData
     const formData = new FormData();
@@ -54,6 +79,7 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error("Groq API error response:", errorData);
       throw new Error(
         `Groq Whisper API error: ${
           errorData.error?.message || response.statusText
