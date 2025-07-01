@@ -27,24 +27,20 @@ const eyeBlinkKeyframes = `
 interface AISpeakerDisplayProps {
   isAudioPlaying: boolean;
   isListening: boolean;
-  isDebateLoading: boolean;
   isProcessing: boolean;
   audioLevel: number;
   sessionStatus: string;
   handleMicButtonClick: () => void;
-  currentDebateId: string | null;
   isDarkMode?: boolean;
 }
 
 export default function AISpeakerDisplay({
   isAudioPlaying,
   isListening,
-  isDebateLoading,
   isProcessing,
   audioLevel,
   sessionStatus,
   handleMicButtonClick,
-  currentDebateId,
   isDarkMode = false,
 }: AISpeakerDisplayProps) {
   // Add debug logging for isAudioPlaying changes
@@ -187,18 +183,14 @@ export default function AISpeakerDisplay({
       <div className="flex flex-col items-center gap-4 mt-auto">
         <button
           onClick={handleMicButtonClick}
-          disabled={isDebateLoading || !currentDebateId || isProcessing}
+          disabled={isProcessing}
           className={`rounded-full w-16 h-16 flex items-center justify-center transition-all ${
             isListening
               ? "bg-red-500 hover:bg-red-600 animate-pulse"
               : "bg-emerald-500 hover:bg-emerald-600"
-          } ${
-            isDebateLoading || !currentDebateId || isProcessing
-              ? "opacity-50 cursor-not-allowed"
-              : "opacity-100"
-          }`}
+          } ${isProcessing ? "opacity-50 cursor-not-allowed" : "opacity-100"}`}
         >
-          {isDebateLoading || isProcessing ? (
+          {isProcessing ? (
             <Loader2 className="h-6 w-6 text-white animate-spin" />
           ) : isListening ? (
             <Square className="h-6 w-6 text-white" />
@@ -212,9 +204,7 @@ export default function AISpeakerDisplay({
             isDarkMode ? "text-emerald-400" : "text-emerald-600"
           }`}
         >
-          {isDebateLoading ? (
-            "INITIALIZING SESSION..."
-          ) : isProcessing ? (
+          {isProcessing ? (
             sessionStatus
           ) : isListening ? (
             "LISTENING..."

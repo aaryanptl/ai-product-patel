@@ -1,7 +1,7 @@
 "use client";
 
 import Debater from "@/components/debater";
-import { Message } from "ai";
+import { Message } from "@ai-sdk/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // Import new components
@@ -28,9 +28,6 @@ export default function Home() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [pendingAIMessage, setPendingAIMessage] = useState<string>("");
   const [recentUserAudio, setRecentUserAudio] = useState<string>("");
-
-  // Custom hooks
-  const { currentDebateId, isDebateLoading } = useDebateInitialization();
 
   // Create a ref for handleTranscriptReceived function
   const handleTranscriptReceivedRef = useRef<
@@ -100,8 +97,6 @@ export default function Home() {
 
   // Handle mic button click
   const handleMicButtonClick = useCallback(() => {
-    if (isDebateLoading || !currentDebateId) return;
-
     if (isProcessing) {
       console.log("⏳ Cannot toggle mic while processing...");
       return;
@@ -129,7 +124,7 @@ export default function Home() {
     if (micButton) {
       (micButton as HTMLButtonElement).click();
     }
-  }, [isListening, isDebateLoading, currentDebateId, isProcessing]);
+  }, [isListening, isProcessing]);
 
   // Handle when a new transcript is received
   const handleTranscriptReceived = useCallback(
@@ -304,12 +299,10 @@ export default function Home() {
           <AISpeakerDisplay
             isAudioPlaying={isAudioPlaying}
             isListening={isListening}
-            isDebateLoading={isDebateLoading}
             isProcessing={isProcessing}
             audioLevel={audioLevel}
             sessionStatus={""}
             handleMicButtonClick={handleMicButtonClick}
-            currentDebateId={currentDebateId}
           />
         </div>
 

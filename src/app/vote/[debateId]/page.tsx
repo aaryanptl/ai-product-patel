@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@supabase/supabase-js";
 import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, ExternalLink, Share2 } from "lucide-react";
 import Link from "next/link";
@@ -13,7 +12,6 @@ import { Database } from "@/types/supabase";
 // Initialize Supabase client (will be configured with environment variables)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 // Define vote type
 interface Vote {
@@ -72,146 +70,6 @@ export default function VotePage() {
     localStorage.setItem(storageKey, vote);
     setHasVoted(true);
     setVotedFor(vote);
-  };
-
-  // Load votes from Supabase
-  useEffect(() => {
-    const fetchVotes = async () => {
-      try {
-        // Get debate info
-        const { data: debateData, error: debateError } = await supabase
-          .from("rt_debates")
-          .select("title")
-          .eq("id", debateId)
-          .single();
-
-        if (debateError) throw debateError;
-        setDebateInfo(debateData);
-
-        // Set share URL
-        const url = `${window.location.origin}/vote/${debateId}`;
-        setShareUrl(url);
-
-        // Get vote counts
-        const { count: humanCount, error: humanError } = await supabase
-          .from("rt_votes")
-          .select("*", { count: "exact", head: true })
-          .eq("debate_id", debateId)
-          .eq("vote_for", "human");
-
-        const { count: aiCount, error: aiError } = await supabase
-          .from("rt_votes")
-          .select("*", { count: "exact", head: true })
-          .eq("debate_id", debateId)
-          .eq("vote_for", "ai");
-
-        if (humanError) throw humanError;
-        if (aiError) throw aiError;
-
-        setVotes({
-          human: humanCount || 0,
-          ai: aiCount || 0,
-        });
-
-        console.log(
-          `Fetched votes: human=${humanCount}, ai=${aiCount} for debate ${debateId}`
-        );
-
-        // Check if user has voted
-        const hasAlreadyVoted = checkIfVoted();
-
-        // If there's an initial vote parameter and user hasn't voted yet, cast the vote
-        if (
-          initialVote &&
-          !hasAlreadyVoted &&
-          (initialVote === "human" || initialVote === "ai")
-        ) {
-          await handleVote(initialVote as "human" | "ai");
-        }
-      } catch (error) {
-        console.error("Error fetching votes:", error);
-        // Reset votes to 0 in case of error
-        setVotes({ human: 0, ai: 0 });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchVotes();
-
-    // Set up real-time subscription for votes
-    const votesSubscription = supabase
-      .channel(`votes-channel-${debateId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "rt_votes",
-          filter: `debate_id=eq.${debateId}`,
-        },
-        (payload) => {
-          // Update vote count when new votes come in
-          if (payload.eventType === "INSERT") {
-            const voteData =
-              payload.new as Database["public"]["Tables"]["rt_votes"]["Row"];
-
-            console.log("New vote received:", voteData);
-
-            if (voteData.vote_for === "human" || voteData.vote_for === "ai") {
-              setVotes((prev) => {
-                const newVotes = {
-                  ...prev,
-                  [voteData.vote_for]: prev[voteData.vote_for] + 1,
-                };
-                console.log("Updated votes:", newVotes);
-                return newVotes;
-              });
-            }
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log(`Realtime subscription status: ${status}`);
-      });
-
-    return () => {
-      supabase.removeChannel(votesSubscription);
-    };
-  }, [debateId, initialVote]);
-
-  const handleVote = async (voteFor: "human" | "ai") => {
-    if (hasVoted) return;
-
-    try {
-      console.log(`Casting vote for ${voteFor} in debate ${debateId}`);
-
-      // Record vote in Supabase
-      const { data, error } = await supabase
-        .from("rt_votes")
-        .insert({
-          debate_id: debateId,
-          vote_for: voteFor,
-          voter_id: getVoterId(),
-          voter_ip: "anonymous", // In a real app, you might capture this server-side
-        })
-        .select();
-
-      if (error) throw error;
-
-      console.log("Vote recorded successfully:", data);
-
-      // Update local state immediately
-      setVotes((prev) => ({
-        ...prev,
-        [voteFor]: prev[voteFor] + 1,
-      }));
-
-      // Save to localStorage
-      saveVote(voteFor);
-    } catch (error) {
-      console.error("Error voting:", error);
-    }
   };
 
   const handleShareLink = async () => {
@@ -304,37 +162,6 @@ export default function VotePage() {
                   </div>
                 </div>
               </div>
-
-              {hasVoted ? (
-                <div className="text-center py-2">
-                  <p className="text-emerald-500 mb-2">
-                    Thanks for voting! You voted for{" "}
-                    {votedFor === "human" ? "Human PMs" : "AI"}.
-                  </p>
-                  <p className="text-gray-400 text-sm">
-                    Total votes: {totalVotes}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="border-blue-500/50 hover:bg-sky-600 py-6"
-                    onClick={() => handleVote("human")}
-                  >
-                    Vote Human
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="border-teal-500/50 hover:bg-teal-600 py-6"
-                    onClick={() => handleVote("ai")}
-                  >
-                    Vote AI
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </Card>
