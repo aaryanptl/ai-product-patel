@@ -1,7 +1,7 @@
 "use client";
 
 import useWebRTCAudioSession from "@/hooks/use-webrtc";
-import { Message } from "ai";
+import { Message } from "@ai-sdk/react";
 import { Loader2, Mic, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
